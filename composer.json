@@ -1,0 +1,19 @@
+{
+	"name": "se-pm/googlecontactsync",
+	"description": "Imports Google Contacts into the FreePBX Contact Manager via the Google People API.",
+	"license": "GPL-3.0-or-later",
+	"require": {
+		"google/apiclient": "^2.15"
+	},
+	"scripts": {
+		"pre-autoload-dump": "Google\\Task\\Composer::cleanup"
+	},
+	"extra": {
+		"google/apiclient-services": ["PeopleService"]
+	},
+	"config": {
+		"optimize-autoloader": true,
+		"allow-plugins": { "google/apiclient-services": true },
+		"platform": { "php": "8.2" }
+	}
+}

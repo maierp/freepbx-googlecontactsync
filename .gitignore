@@ -1,6 +1,7 @@
 # Composer
-/vendor/
+# vendor/ is intentionally committed (see implementation spec §6).
 composer.phar
+composer-setup.php
 
 # FreePBX signing artifacts
 module.sig

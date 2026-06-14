@@ -1,0 +1,91 @@
+<module>
+	<rawname>googlecontactsync</rawname>
+	<repo>standard</repo>
+	<name>Google Contact Sync</name>
+	<version>1.0.0</version>
+	<publisher>Dr. Patrick Maier (Softwareentwicklung Patrick Maier)</publisher>
+	<license>GPLv3+</license>
+	<licenselink>http://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
+	<category>Admin</category>
+	<description>Imports each user's Google Contacts into Contact Manager via the Google People API, on a configurable schedule, with per-user OAuth from UCP.</description>
+	<menuitems>
+		<googlecontactsync needsenginedb="yes">Google Contact Sync</googlecontactsync>
+	</menuitems>
+	<depends>
+		<version>17.0.1</version>
+		<module>contactmanager ge 17.0.1</module>
+		<module>userman ge 17.0.1</module>
+	</depends>
+	<supported>
+		<version>17.0</version>
+	</supported>
+
+	<!-- UCP integration: register the user-facing config page -->
+	<hooks>
+		<ucp class="Ucp">
+			<method callingMethod="constructModuleConfigPages" class="Googlecontactsync" namespace="FreePBX\modules">ucpConfigPage</method>
+			<method callingMethod="delUser" class="Googlecontactsync" namespace="FreePBX\modules">ucpDelUser</method>
+		</ucp>
+		<userman class="Userman" namespace="FreePBX\modules">
+			<method callingMethod="delUser" class="Googlecontactsync" namespace="FreePBX\modules">usermanDelUser</method>
+		</userman>
+	</hooks>
+
+	<database>
+		<table name="googlecontactsync_accounts">
+			<field name="id" type="integer" primaryKey="true" autoincrement="true"/>
+			<field name="uid" type="integer"/>                 <!-- userman user id -->
+			<field name="google_sub" type="string" length="64" notnull="false"/> <!-- stable Google account id -->
+			<field name="google_email" type="string" length="255" notnull="false"/>
+			<field name="access_token" type="text" notnull="false"/>   <!-- encrypted JSON -->
+			<field name="refresh_token" type="text" notnull="false"/>  <!-- encrypted -->
+			<field name="token_expires" type="integer" notnull="false"/>
+			<field name="sync_token" type="text" notnull="false"/>     <!-- People API syncToken -->
+			<field name="target_groupid" type="integer" notnull="false"/>
+			<field name="target_group_type" type="string" length="25" notnull="false"/>
+			<field name="frequency" type="string" length="20" notnull="false"/> <!-- override or 'default' -->
+			<field name="freq_time" type="string" length="5" notnull="false"/>   <!-- HH:MM for daily/weekly -->
+			<field name="freq_dow" type="integer" notnull="false"/>              <!-- 0-6 for weekly -->
+			<field name="enabled" type="boolean" default="1"/>
+			<field name="last_sync" type="integer" notnull="false"/>
+			<field name="last_status" type="string" length="20" notnull="false"/> <!-- ok|error|running -->
+			<field name="last_message" type="text" notnull="false"/>
+			<field name="created" type="integer" notnull="false"/>
+			<field name="updated" type="integer" notnull="false"/>
+			<key name="uid_unique" type="unique"><column name="uid"/></key>
+		</table>
+
+		<table name="googlecontactsync_contacts">
+			<field name="id" type="integer" primaryKey="true" autoincrement="true"/>
+			<field name="account_id" type="integer"/>
+			<field name="resource_name" type="string" length="128"/>  <!-- people/cXXXX -->
+			<field name="etag" type="string" length="128" notnull="false"/>
+			<field name="entryid" type="integer"/>                    <!-- contactmanager_group_entries.id -->
+			<field name="groupid" type="integer"/>
+			<field name="last_synced" type="integer" notnull="false"/>
+			<key name="acct_resource" type="unique">
+				<column name="account_id"/>
+				<column name="resource_name"/>
+			</key>
+		</table>
+
+		<table name="googlecontactsync_logs">
+			<field name="id" type="integer" primaryKey="true" autoincrement="true"/>
+			<field name="account_id" type="integer" notnull="false"/>
+			<field name="uid" type="integer" notnull="false"/>
+			<field name="started" type="integer"/>
+			<field name="finished" type="integer" notnull="false"/>
+			<field name="status" type="string" length="20"/>          <!-- ok|error -->
+			<field name="added" type="integer" default="0"/>
+			<field name="updated" type="integer" default="0"/>
+			<field name="deleted" type="integer" default="0"/>
+			<field name="message" type="text" notnull="false"/>
+		</table>
+	</database>
+
+	<console>
+		<command>
+			<name>googlecontactsync</name>
+		</command>
+	</console>
+</module>
