@@ -1,0 +1,18 @@
+# Composer
+/vendor/
+composer.phar
+
+# FreePBX signing artifacts
+module.sig
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Logs / temp
+*.log
+/tmp/
