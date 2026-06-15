@@ -11,7 +11,7 @@
  * Foundation, either version 3 of the License, or (at your option) any later version.
  *
  * @var array  $status          Connection status (connected, email, last_sync, target_groupid, frequency, ...).
- * @var string $authUrl         Google consent URL (when not connected).
+ * @var string $authUrl         Google consent URL (drives both Connect and Reconnect).
  * @var string $authError       Reason the connect action is unavailable.
  * @var string $disconnectToken CSRF token for the disconnect link.
  * @var string $saveToken       CSRF token for the settings form.
@@ -79,6 +79,13 @@ $currentDow  = ($status['freq_dow'] !== null) ? (int) $status['freq_dow'] : (int
 				<div class="alert alert-danger">
 					<strong><?php echo _('Last sync error:'); ?></strong>
 					<?php echo htmlspecialchars((string) $status['last_message']); ?>
+					<?php if (!empty($authUrl)): ?>
+						<div style="margin-top:8px;">
+							<a class="btn btn-primary btn-sm" href="<?php echo htmlspecialchars($authUrl); ?>">
+								<i class="fa fa-google"></i> <?php echo _('Reconnect Google Account'); ?>
+							</a>
+						</div>
+					<?php endif; ?>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -156,6 +163,11 @@ $currentDow  = ($status['freq_dow'] !== null) ? (int) $status['freq_dow'] : (int
 			   onclick="return confirm('<?php echo htmlspecialchars(_('Disconnect this Google account?'), ENT_QUOTES); ?>');">
 				<i class="fa fa-unlink"></i> <?php echo _('Disconnect'); ?>
 			</a>
+			<?php if (!empty($authUrl)): ?>
+				<a class="btn btn-default" href="<?php echo htmlspecialchars($authUrl); ?>">
+					<i class="fa fa-google"></i> <?php echo _('Reconnect'); ?>
+				</a>
+			<?php endif; ?>
 		</p>
 	<?php elseif (!empty($authUrl)): ?>
 		<p><?php echo _('Import your Google Contacts into your PBX contacts.'); ?></p>

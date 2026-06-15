@@ -261,7 +261,10 @@ class Googlecontactsync extends Modules {
 
 		$authUrl   = '';
 		$authError = '';
-		if (!$status['connected'] && $status['credentialsConfigured']) {
+		// Build the consent URL whenever credentials are configured — it drives
+		// both the initial "Connect" button and the "Reconnect" button shown to
+		// an already-connected account whose Google access was revoked/expired.
+		if ($status['credentialsConfigured']) {
 			try {
 				$authUrl = $gcs->buildAuthUrl($this->userId);
 			} catch (\Exception $e) {

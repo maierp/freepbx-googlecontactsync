@@ -274,6 +274,30 @@ class PeopleSyncTest extends TestCase {
 		$this->assertSame('TOKEN-1', $this->account($accountId)['sync_token']);
 	}
 
+	public function testRevokedAccessReportsFriendlyReconnectMessage(): void {
+		$accountId = $this->seedAccount('TOKEN-1');
+		// Google returns a verbose 401 JSON body when the grant was revoked.
+		$authError = new GoogleServiceException(
+			'{"error":{"code":401,"message":"Request had invalid authentication credentials.","status":"UNAUTHENTICATED"}}',
+			401,
+			null,
+			array(array('reason' => 'authError', 'message' => 'Invalid Credentials'))
+		);
+		$conns = new FakePeopleConnections(array($authError));
+
+		$result = $this->engine($conns)->syncAccount($this->account($accountId));
+
+		$this->assertFalse($result['status']);
+		// The raw Google 401 JSON must not be surfaced.
+		$this->assertStringNotContainsString('UNAUTHENTICATED', $result['message']);
+		$this->assertStringNotContainsString('{', $result['message']);
+		$this->assertStringContainsString('reconnect', strtolower($result['message']));
+		$this->assertSame('error', $this->account($accountId)['last_status']);
+		$this->assertSame($result['message'], $this->account($accountId)['last_message']);
+		// A failed auth run must not clobber the stored sync token.
+		$this->assertSame('TOKEN-1', $this->account($accountId)['sync_token']);
+	}
+
 	public function testDeletedTargetGroupForcesFullResyncAndReimportsContacts(): void {
 		// The user deleted the import group; its id is stored but no longer
 		// resolvable, and a stored sync token would otherwise drive an

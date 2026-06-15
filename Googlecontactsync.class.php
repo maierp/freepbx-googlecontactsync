@@ -81,6 +81,59 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 
 	public function uninstall() {
 		$this->removeCronEntry();
+		// Revoke every outstanding Google grant before the module loader drops our
+		// tables, so no live tokens are left behind that we can no longer manage.
+		foreach ($this->getAllAccounts() as $account) {
+			$this->revokeAccountToken($account);
+		}
+		// The account/contact/log tables are dropped by the framework on uninstall,
+		// but the KV settings (including the encrypted Client Secret and the OAuth
+		// state-signing key) live in the shared kvstore and must be cleared here.
+		$this->purgeSettings();
+		// Finally, securely remove the at-rest encryption key file.
+		$this->deleteKeyFile();
+	}
+
+	/**
+	 * Remove all global KV settings owned by this module (Client ID, encrypted
+	 * Client Secret, redirect URI, schedule, and the OAuth state-signing key).
+	 */
+	private function purgeSettings() {
+		$keys = array(
+			self::KEY_CLIENT_ID,
+			self::KEY_CLIENT_SECRET,
+			self::KEY_REDIRECT_URI,
+			self::KEY_FREQUENCY,
+			self::KEY_FREQ_TIME,
+			self::KEY_FREQ_DOW,
+			self::KEY_STATE_KEY,
+		);
+		foreach ($keys as $key) {
+			// setConfig(..., false) deletes the stored row (delConfig alias).
+			$this->setConfig($key, false);
+		}
+	}
+
+	/**
+	 * Securely delete the 256-bit encryption key file: overwrite its contents
+	 * before unlinking so the key cannot be trivially recovered from freed disk
+	 * blocks. No-op when the file is absent.
+	 */
+	private function deleteKeyFile() {
+		$path = $this->getKeyFilePath();
+		if (!is_file($path)) {
+			return;
+		}
+		$size = @filesize($path);
+		if ($size && $size > 0) {
+			$fh = @fopen($path, 'r+');
+			if ($fh !== false) {
+				@fwrite($fh, str_repeat("\0", $size));
+				@fflush($fh);
+				@fclose($fh);
+			}
+		}
+		@unlink($path);
 	}
 
 	/**
@@ -980,6 +1033,25 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 			return true;
 		}
 
+		$this->revokeAccountToken($account);
+
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE account_id = ?');
+		$sth->execute(array((int) $account['id']));
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_accounts WHERE uid = ?');
+		$sth->execute(array($uid));
+		return true;
+	}
+
+	/**
+	 * Best-effort revocation of an account's Google grant at Google's revoke
+	 * endpoint. The refresh token is preferred (revoking it invalidates the whole
+	 * grant); the access token is the fallback. Never throws: a failed revoke
+	 * (network error, already-expired token, or missing credentials) must not
+	 * block local cleanup, and no token value is ever surfaced to callers or logs.
+	 *
+	 * @param array<string,mixed> $account
+	 */
+	private function revokeAccountToken(array $account) {
 		try {
 			$store  = $this->getTokenStore();
 			$revoke = '';
@@ -996,14 +1068,8 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 				$this->getGoogleClient()->revokeToken($revoke);
 			}
 		} catch (\Exception $e) {
-			// Revocation is best-effort; always purge locally regardless.
+			// Revocation is best-effort; callers always purge locally regardless.
 		}
-
-		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE account_id = ?');
-		$sth->execute(array((int) $account['id']));
-		$sth = $this->db->prepare('DELETE FROM googlecontactsync_accounts WHERE uid = ?');
-		$sth->execute(array($uid));
-		return true;
 	}
 
 	/**
@@ -1334,9 +1400,105 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	public function ucpConfigPage($mods, $uid) {
 	}
 
+	/**
+	 * UCP user-deletion hook: purge the deleted user's Google Contact Sync data.
+	 * @param int    $id      userman user id (server-trusted)
+	 * @param string $display
+	 * @param mixed  $data
+	 */
 	public function ucpDelUser($id, $display, $data) {
+		$this->deleteUserData($id);
 	}
 
+	/**
+	 * Userman user-deletion hook: purge the deleted user's Google Contact Sync
+	 * data. Registered alongside the UCP hook so deletion from either surface
+	 * leaves no orphaned mappings, logs, or live Google tokens.
+	 * @param int    $id      userman user id (server-trusted)
+	 * @param string $display
+	 * @param mixed  $data
+	 */
 	public function usermanDelUser($id, $display, $data) {
+		$this->deleteUserData($id);
+	}
+
+	/**
+	 * Full account cleanup for a deleted userman/UCP user: revoke the Google
+	 * grant, remove the Contact Manager entries this account imported, then delete
+	 * the mapping, log, and account rows. Idempotent and safe to call when the
+	 * user has no connected account.
+	 *
+	 * @param int $id userman user id (server-trusted; never client-supplied)
+	 */
+	private function deleteUserData($id) {
+		$uid = (int) $id;
+		if ($uid <= 0) {
+			return;
+		}
+		$account = $this->getAccountByUid($uid);
+		if (!$account) {
+			return;
+		}
+		$accountId = (int) $account['id'];
+
+		$this->revokeAccountToken($account);
+		$this->deleteImportedEntries($accountId);
+
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE account_id = ?');
+		$sth->execute(array($accountId));
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_logs WHERE account_id = ?');
+		$sth->execute(array($accountId));
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_accounts WHERE id = ?');
+		$sth->execute(array($accountId));
+	}
+
+	/**
+	 * Remove the Contact Manager entries this account imported, via the public CM
+	 * API (never direct SQL). Entries whose private group was already removed by
+	 * Contact Manager's own user-delete hook are skipped silently; entries in
+	 * shared external groups are removed so none are left orphaned. Affected
+	 * groups have their contact files regenerated once after the batch.
+	 *
+	 * @param int $accountId
+	 */
+	private function deleteImportedEntries($accountId) {
+		$accountId = (int) $accountId;
+		$sth = $this->db->prepare(
+			'SELECT entryid, groupid FROM googlecontactsync_contacts WHERE account_id = ? AND entryid IS NOT NULL'
+		);
+		$sth->execute(array($accountId));
+		$rows = $sth->fetchAll(\PDO::FETCH_ASSOC);
+		if (!$rows) {
+			return;
+		}
+
+		$cm     = $this->freepbx->Contactmanager;
+		$groups = array();
+		foreach ($rows as $row) {
+			$entryid = (int) $row['entryid'];
+			if ($entryid <= 0) {
+				continue;
+			}
+			try {
+				$cm->deleteEntryByID($entryid, false);
+			} catch (\Exception $e) {
+				// Entry already gone (e.g. its private group was deleted by
+				// Contact Manager's own user-delete hook); nothing to do.
+			}
+			if (!empty($row['groupid'])) {
+				$groups[(int) $row['groupid']] = true;
+			}
+		}
+
+		foreach (array_keys($groups) as $groupId) {
+			try {
+				$group = $cm->getGroupByID($groupId);
+				if (!empty($group)) {
+					$cm->updateContactUpdatedDetails($group['owner'], array($groupId));
+				}
+			} catch (\Exception $e) {
+				// Group already removed; contact-file regeneration is moot.
+			}
+		}
 	}
 }

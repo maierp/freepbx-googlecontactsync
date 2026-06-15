@@ -169,7 +169,7 @@ class PeopleSync {
 			);
 		} catch (\Throwable $e) {
 			$finished = time();
-			$message  = $this->redact($e->getMessage());
+			$message  = $this->describeSyncError($e);
 			$this->markStatus($accountId, 'error', $finished, $message);
 			$this->writeLog(
 				$accountId, $uid, $started, $finished, 'error',
@@ -362,6 +362,46 @@ class PeopleSync {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether a People API error is an authentication failure (HTTP 401): the
+	 * stored token was revoked at Google, the grant expired, or the credentials
+	 * are otherwise invalid. Google returns a verbose JSON body for these, so we
+	 * detect them to surface a short, actionable message instead.
+	 *
+	 * @param GoogleServiceException $e
+	 * @return bool
+	 */
+	private function isAuthError(GoogleServiceException $e) {
+		if ((int) $e->getCode() === 401) {
+			return true;
+		}
+		foreach ((array) $e->getErrors() as $err) {
+			if (!is_array($err)) {
+				continue;
+			}
+			$reason = isset($err['reason']) ? (string) $err['reason'] : '';
+			if (strcasecmp($reason, 'authError') === 0 || strcasecmp($reason, 'unauthorized') === 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Turn a caught sync exception into a short, redacted, user-facing message.
+	 * Authentication failures (revoked/expired Google access) are mapped to a
+	 * clear "reconnect" prompt rather than echoing Google's raw 401 JSON body.
+	 *
+	 * @param \Throwable $e
+	 * @return string
+	 */
+	private function describeSyncError(\Throwable $e) {
+		if ($e instanceof GoogleServiceException && $this->isAuthError($e)) {
+			return _('Google access was revoked or has expired. Please reconnect your Google account.');
+		}
+		return $this->redact($e->getMessage());
 	}
 
 	/**
