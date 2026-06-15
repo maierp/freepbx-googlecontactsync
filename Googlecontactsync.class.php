@@ -36,6 +36,7 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	/** KV store keys for global settings. */
 	const KEY_CLIENT_ID     = 'client_id';
 	const KEY_CLIENT_SECRET = 'client_secret_enc';
+	const KEY_REDIRECT_URI  = 'redirect_uri';
 	const KEY_FREQUENCY     = 'global_frequency';
 	const KEY_FREQ_TIME     = 'global_freq_time';
 	const KEY_FREQ_DOW      = 'global_freq_dow';
@@ -96,15 +97,25 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 		// Write-only secret: an empty field means "keep the stored value".
 		$this->setCredentials($clientId, $clientSecret === '' ? null : $clientSecret);
 
+		$redirectUri    = isset($request['redirect_uri']) ? trim((string) $request['redirect_uri']) : '';
+		$redirectUriOk  = $this->setRedirectUri($redirectUri);
+
 		$frequency = isset($request['frequency']) ? (string) $request['frequency'] : '';
 		$freqTime  = isset($request['freq_time']) ? (string) $request['freq_time'] : '';
 		$freqDow   = isset($request['freq_dow']) && $request['freq_dow'] !== '' ? (int) $request['freq_dow'] : null;
 		$this->setGlobalFrequency($frequency, $freqTime, $freqDow);
 
-		$this->message = array(
-			'message' => _('Settings saved.'),
-			'type'    => 'success',
-		);
+		if (!$redirectUriOk) {
+			$this->message = array(
+				'message' => _('Settings saved, but the Redirect URI was ignored: it must be a valid HTTPS URL.'),
+				'type'    => 'warning',
+			);
+		} else {
+			$this->message = array(
+				'message' => _('Settings saved.'),
+				'type'    => 'success',
+			);
+		}
 	}
 
 	public function getActionBar($request) {
@@ -137,11 +148,12 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	 */
 	public function showPage() {
 		$settings = load_view(__DIR__.'/views/settings.php', array(
-			'clientId'        => $this->getClientId(),
-			'hasClientSecret' => $this->hasClientSecret(),
-			'redirectUri'     => $this->getRedirectUri(),
-			'frequency'       => $this->getGlobalFrequency(),
-			'daysOfWeek'      => $this->getDaysOfWeek(),
+			'clientId'           => $this->getClientId(),
+			'hasClientSecret'    => $this->hasClientSecret(),
+			'redirectUri'        => trim((string) $this->getConfig(self::KEY_REDIRECT_URI)),
+			'defaultRedirectUri' => $this->getDefaultRedirectUri(),
+			'frequency'          => $this->getGlobalFrequency(),
+			'daysOfWeek'         => $this->getDaysOfWeek(),
 		));
 		return load_view(__DIR__.'/views/main.php', array(
 			'message'  => $this->message,
@@ -246,11 +258,26 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	}
 
 	/**
-	 * The fixed OAuth redirect URI the admin must register in Google Cloud.
+	 * The OAuth redirect URI the admin must register in Google Cloud. Returns the
+	 * admin-configured override when set, otherwise an auto-detected default.
 	 *
 	 * @return string e.g. https://pbx.example.com/ucp/index.php
 	 */
 	public function getRedirectUri() {
+		$stored = trim((string) $this->getConfig(self::KEY_REDIRECT_URI));
+		if ($stored !== '') {
+			return $stored;
+		}
+		return $this->getDefaultRedirectUri();
+	}
+
+	/**
+	 * Auto-detected redirect URI from the current request host (the suggested
+	 * default shown when no override is configured).
+	 *
+	 * @return string
+	 */
+	public function getDefaultRedirectUri() {
 		$host = '';
 		if (!empty($_SERVER['HTTP_HOST'])) {
 			$host = $_SERVER['HTTP_HOST'];
@@ -260,6 +287,27 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 			$host = gethostname();
 		}
 		return 'https://'.$host.'/ucp/index.php';
+	}
+
+	/**
+	 * Persist an admin-configured redirect URI override. An empty value clears the
+	 * override so the auto-detected default is used again. Only well-formed HTTPS
+	 * URLs are accepted (Google rejects non-HTTPS redirect URIs).
+	 *
+	 * @param string $uri
+	 * @return bool True when stored/cleared; false when the value was rejected.
+	 */
+	public function setRedirectUri($uri) {
+		$uri = trim((string) $uri);
+		if ($uri === '') {
+			$this->setConfig(self::KEY_REDIRECT_URI, false);
+			return true;
+		}
+		if (!filter_var($uri, FILTER_VALIDATE_URL) || stripos($uri, 'https://') !== 0) {
+			return false;
+		}
+		$this->setConfig(self::KEY_REDIRECT_URI, $uri);
+		return true;
 	}
 
 	/**

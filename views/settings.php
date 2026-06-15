@@ -88,7 +88,12 @@ $freq = $frequency['frequency'];
 									<i class="fa fa-question-circle fpbx-help-icon" data-for="redirect_uri"></i>
 								</div>
 								<div class="col-md-9">
-									<input type="text" class="form-control" id="redirect_uri" readonly onclick="this.select();" value="<?php echo htmlspecialchars($redirectUri); ?>">
+									<div class="input-group">
+										<input type="text" class="form-control" id="redirect_uri" name="redirect_uri" autocomplete="off" placeholder="<?php echo htmlspecialchars($defaultRedirectUri); ?>" value="<?php echo htmlspecialchars($redirectUri); ?>">
+										<span class="input-group-btn">
+											<button type="button" class="btn btn-default" id="redirect_uri_default" title="<?php echo htmlspecialchars(_('Use auto-detected URL'), ENT_QUOTES); ?>" data-default="<?php echo htmlspecialchars($defaultRedirectUri); ?>"><?php echo _('Use default'); ?></button>
+										</span>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -96,7 +101,7 @@ $freq = $frequency['frequency'];
 				</div>
 				<div class="row">
 					<div class="col-md-12">
-						<span id="redirect_uri-help" class="help-block fpbx-help-block"><?php echo _('Add this exact value to the Authorized redirect URIs of your Google OAuth client. Requires a public HTTPS FQDN.'); ?></span>
+						<span id="redirect_uri-help" class="help-block fpbx-help-block"><?php echo _('Add this exact value to the Authorized redirect URIs of your Google OAuth client. Must be a public HTTPS URL ending in /ucp/index.php. Leave blank to use the auto-detected default shown as placeholder.'); ?></span>
 					</div>
 				</div>
 			</div>
@@ -202,6 +207,16 @@ $freq = $frequency['frequency'];
 		var sel = document.getElementById('frequency');
 		if (sel) {
 			sel.addEventListener('change', toggleFreqFields);
+		}
+
+		var defBtn = document.getElementById('redirect_uri_default');
+		if (defBtn) {
+			defBtn.addEventListener('click', function() {
+				var input = document.getElementById('redirect_uri');
+				if (input) {
+					input.value = defBtn.getAttribute('data-default') || '';
+				}
+			});
 		}
 	})();
 </script>
