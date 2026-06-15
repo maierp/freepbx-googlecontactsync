@@ -37,6 +37,13 @@ class GoogleClientFactory {
 	/** Least-privilege People API scope (read-only contacts). */
 	const SCOPE = 'https://www.googleapis.com/auth/contacts.readonly';
 
+	/**
+	 * Identity scopes. Required so Google issues an `id_token` (carrying the
+	 * stable account `sub` and `email`) alongside the access token, which we
+	 * verify to identify the connected Google account.
+	 */
+	const SCOPES_IDENTITY = array('openid', 'email');
+
 	/** @var string */
 	private $clientId;
 
@@ -66,7 +73,7 @@ class GoogleClientFactory {
 		$client->setClientId($this->clientId);
 		$client->setClientSecret($this->clientSecret);
 		$client->setRedirectUri($this->redirectUri);
-		$client->setScopes(array(self::SCOPE));
+		$client->setScopes(array_merge(array(self::SCOPE), self::SCOPES_IDENTITY));
 		$client->setAccessType('offline');
 		$client->setPrompt('consent');
 		$client->setIncludeGrantedScopes(true);

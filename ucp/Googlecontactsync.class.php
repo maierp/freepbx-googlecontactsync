@@ -53,24 +53,37 @@ class Googlecontactsync extends Modules {
 	/**
 	 * Detect and route the OAuth callback / disconnect request. Always derives
 	 * the uid from the authenticated session (never from client input).
+	 *
+	 * The Google OAuth callback lands on the bare redirect URI (/ucp/index.php)
+	 * carrying only Google's own query parameters (state, code, scope, iss) — it
+	 * does NOT include our `googlecontactsync` marker. We therefore recognise it
+	 * by the presence of our signed `state`; handleOAuthCallback() verifies that
+	 * state and rejects anything that is not ours. The disconnect action is our
+	 * own link, so it keeps using the explicit `googlecontactsync=disconnect`.
 	 */
 	private function handleIncomingRequest() {
-		if ($this->userId === false || !isset($_REQUEST['googlecontactsync'])) {
-			return;
-		}
-		$action = (string) $_REQUEST['googlecontactsync'];
-		$gcs    = $this->UCP->FreePBX->Googlecontactsync;
+		$gcs = $this->UCP->FreePBX->Googlecontactsync;
 
-		if ($action === 'oauth' && isset($_GET['error'])) {
-			$this->redirectClean(array('googlecontactsyncmsg' => 'denied'));
-		} elseif ($action === 'oauth' && isset($_GET['code'], $_GET['state'])) {
+		// --- Google OAuth callback (state always present; code on success, error on denial). ---
+		if (isset($_GET['state']) && (isset($_GET['code']) || isset($_GET['error']))) {
+			if ($this->userId === false) {
+				return;
+			}
+			if (isset($_GET['error'])) {
+				$this->redirectClean(array('googlecontactsyncmsg' => 'denied'));
+			}
 			try {
 				$gcs->handleOAuthCallback((string) $_GET['code'], (string) $_GET['state'], $this->userId);
 				$this->redirectClean(array('googlecontactsyncmsg' => 'connected'));
 			} catch (\Exception $e) {
 				$this->redirectClean(array('googlecontactsyncmsg' => 'error'));
 			}
-		} elseif ($action === 'disconnect' && isset($_GET['token'])) {
+			return;
+		}
+
+		// --- Disconnect action (our own link). ---
+		if ($this->userId !== false && isset($_REQUEST['googlecontactsync'])
+			&& (string) $_REQUEST['googlecontactsync'] === 'disconnect' && isset($_GET['token'])) {
 			if ($gcs->verifyDisconnectToken($this->userId, (string) $_GET['token'])) {
 				$gcs->disconnect($this->userId);
 				$this->redirectClean(array('googlecontactsyncmsg' => 'disconnected'));
