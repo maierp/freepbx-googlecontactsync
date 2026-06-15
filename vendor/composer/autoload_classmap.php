@@ -16,6 +16,8 @@ return array(
     'Firebase\\JWT\\JWTExceptionWithPayloadInterface' => $vendorDir . '/firebase/php-jwt/src/JWTExceptionWithPayloadInterface.php',
     'Firebase\\JWT\\Key' => $vendorDir . '/firebase/php-jwt/src/Key.php',
     'Firebase\\JWT\\SignatureInvalidException' => $vendorDir . '/firebase/php-jwt/src/SignatureInvalidException.php',
+    'FreePBX\\modules\\Googlecontactsync\\Lib\\GoogleClientFactory' => $baseDir . '/Lib/GoogleClientFactory.php',
+    'FreePBX\\modules\\Googlecontactsync\\Lib\\TokenStore' => $baseDir . '/Lib/TokenStore.php',
     'Google\\AccessToken\\Revoke' => $vendorDir . '/google/apiclient/src/AccessToken/Revoke.php',
     'Google\\AccessToken\\Verify' => $vendorDir . '/google/apiclient/src/AccessToken/Verify.php',
     'Google\\AuthHandler\\AuthHandlerFactory' => $vendorDir . '/google/apiclient/src/AuthHandler/AuthHandlerFactory.php',

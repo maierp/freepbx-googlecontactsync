@@ -42,6 +42,7 @@ class ComposerStaticInit0189ca65228f4ed0e487de9b694648d8
         ),
         'F' =>
         array (
+            'FreePBX\\modules\\Googlecontactsync\\Lib\\' => 38,
             'Firebase\\JWT\\' => 13,
         ),
     );
@@ -96,6 +97,10 @@ class ComposerStaticInit0189ca65228f4ed0e487de9b694648d8
         array (
             0 => __DIR__ . '/..' . '/google/apiclient/src',
         ),
+        'FreePBX\\modules\\Googlecontactsync\\Lib\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/Lib',
+        ),
         'Firebase\\JWT\\' =>
         array (
             0 => __DIR__ . '/..' . '/firebase/php-jwt/src',
@@ -113,6 +118,8 @@ class ComposerStaticInit0189ca65228f4ed0e487de9b694648d8
         'Firebase\\JWT\\JWTExceptionWithPayloadInterface' => __DIR__ . '/..' . '/firebase/php-jwt/src/JWTExceptionWithPayloadInterface.php',
         'Firebase\\JWT\\Key' => __DIR__ . '/..' . '/firebase/php-jwt/src/Key.php',
         'Firebase\\JWT\\SignatureInvalidException' => __DIR__ . '/..' . '/firebase/php-jwt/src/SignatureInvalidException.php',
+        'FreePBX\\modules\\Googlecontactsync\\Lib\\GoogleClientFactory' => __DIR__ . '/../..' . '/Lib/GoogleClientFactory.php',
+        'FreePBX\\modules\\Googlecontactsync\\Lib\\TokenStore' => __DIR__ . '/../..' . '/Lib/TokenStore.php',
         'Google\\AccessToken\\Revoke' => __DIR__ . '/..' . '/google/apiclient/src/AccessToken/Revoke.php',
         'Google\\AccessToken\\Verify' => __DIR__ . '/..' . '/google/apiclient/src/AccessToken/Verify.php',
         'Google\\AuthHandler\\AuthHandlerFactory' => __DIR__ . '/..' . '/google/apiclient/src/AuthHandler/AuthHandlerFactory.php',

@@ -20,15 +20,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 ?>
+<?php if (!empty($message) && is_array($message)) { ?>
+	<div class="alert alert-<?php echo htmlspecialchars($message['type']); ?>"><?php echo htmlspecialchars($message['message']); ?></div>
+<?php } ?>
 <div class="container-fluid">
 	<h1><?php echo _('Google Contact Sync'); ?></h1>
 	<div class="row">
 		<div class="col-sm-12">
-			<div class="display full-border">
-				<div class="panel panel-default">
-					<div class="panel-body">
-						<p><?php echo _('Module installed. Configuration (settings, users, logs) will be available in a future milestone.'); ?></p>
-					</div>
+			<ul class="nav nav-tabs" role="tablist">
+				<li class="active" role="presentation"><a href="#settings" aria-controls="settings" role="tab" data-toggle="tab"><?php echo _('Settings'); ?></a></li>
+			</ul>
+			<div class="tab-content">
+				<div id="settings" class="tab-pane active" role="tabpanel">
+					<?php echo $settings; ?>
 				</div>
 			</div>
 		</div>

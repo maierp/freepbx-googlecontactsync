@@ -5,6 +5,11 @@
 	"require": {
 		"google/apiclient": "^2.15"
 	},
+	"autoload": {
+		"psr-4": {
+			"FreePBX\\modules\\Googlecontactsync\\Lib\\": "Lib/"
+		}
+	},
 	"scripts": {
 		"pre-autoload-dump": "Google\\Task\\Composer::cleanup"
 	},
