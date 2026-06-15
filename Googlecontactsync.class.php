@@ -522,13 +522,41 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 		if ($this->getClientId() === '' || !$this->hasClientSecret()) {
 			throw new \Exception(_('Google OAuth credentials are not configured. Please ask your administrator to set them up.'));
 		}
-		if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {
+		if (!$this->isHttpsRequest()) {
 			throw new \Exception(_('A secure (HTTPS) connection is required to connect a Google account.'));
 		}
 
 		$client = $this->getGoogleClient();
 		$client->setState($this->signState($uid));
 		return $client->createAuthUrl();
+	}
+
+	/**
+	 * Whether the current request reached the client over HTTPS, accounting for
+	 * a TLS-terminating reverse proxy (e.g. Nginx Proxy Manager) where the PHP
+	 * backend itself is served over plain HTTP. Trusts the standard forwarded
+	 * headers the proxy injects.
+	 *
+	 * @return bool
+	 */
+	private function isHttpsRequest() {
+		if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+			return true;
+		}
+		if (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+			// May be a comma-separated list when chained; the first hop is the client.
+			$proto = strtolower(trim(explode(',', (string) $_SERVER['HTTP_X_FORWARDED_PROTO'])[0]));
+			if ($proto === 'https') {
+				return true;
+			}
+		}
+		if (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower((string) $_SERVER['HTTP_X_FORWARDED_SSL']) === 'on') {
+			return true;
+		}
+		if (!empty($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
