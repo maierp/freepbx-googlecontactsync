@@ -22,124 +22,180 @@
 
 $freq = $frequency['frequency'];
 ?>
-<form name="gcssettings" class="fpbx-submit" method="post" action="config.php?display=googlecontactsync" autocomplete="off">
-<input type="hidden" name="action" value="savesettings">
+<div class="fpbx-container">
+	<div class="display full-border">
+		<form name="gcssettings" class="fpbx-submit" method="post" action="config.php?display=googlecontactsync" autocomplete="off">
+			<input type="hidden" name="action" value="savesettings">
 
-<div class="element-container">
-	<div class="row">
-		<div class="col-md-12">
-			<div class="row">
-				<div class="form-group">
-					<div class="col-md-3">
-						<label class="control-label" for="client_id"><?php echo _('Google OAuth Client ID'); ?></label>
-						<i class="fa fa-question-circle fpbx-help-icon" data-for="client_id"></i>
+			<!--Client ID-->
+			<div class="element-container">
+				<div class="row">
+					<div class="col-md-12">
+						<div class="row">
+							<div class="form-group">
+								<div class="col-md-3">
+									<label class="control-label" for="client_id"><?php echo _('Google OAuth Client ID'); ?></label>
+									<i class="fa fa-question-circle fpbx-help-icon" data-for="client_id"></i>
+								</div>
+								<div class="col-md-9">
+									<input type="text" class="form-control" id="client_id" name="client_id" autocomplete="off" value="<?php echo htmlspecialchars($clientId); ?>">
+								</div>
+							</div>
+						</div>
 					</div>
-					<div class="col-md-9">
-						<input type="text" class="form-control" id="client_id" name="client_id" autocomplete="off" value="<?php echo htmlspecialchars($clientId); ?>">
+				</div>
+				<div class="row">
+					<div class="col-md-12">
+						<span id="client_id-help" class="help-block fpbx-help-block"><?php echo _('The OAuth 2.0 Web application Client ID from your Google Cloud project.'); ?></span>
 					</div>
 				</div>
 			</div>
-			<div class="row"><div class="col-md-12"><span id="client_id-help" class="help-block fpbx-help-block"><?php echo _('The OAuth 2.0 Web application Client ID from your Google Cloud project.'); ?></span></div></div>
-		</div>
-	</div>
+			<!--END Client ID-->
 
-	<div class="row">
-		<div class="col-md-12">
-			<div class="row">
-				<div class="form-group">
-					<div class="col-md-3">
-						<label class="control-label" for="client_secret"><?php echo _('Google OAuth Client Secret'); ?></label>
-						<i class="fa fa-question-circle fpbx-help-icon" data-for="client_secret"></i>
+			<!--Client Secret-->
+			<div class="element-container">
+				<div class="row">
+					<div class="col-md-12">
+						<div class="row">
+							<div class="form-group">
+								<div class="col-md-3">
+									<label class="control-label" for="client_secret"><?php echo _('Google OAuth Client Secret'); ?></label>
+									<i class="fa fa-question-circle fpbx-help-icon" data-for="client_secret"></i>
+								</div>
+								<div class="col-md-9">
+									<input type="password" class="form-control" id="client_secret" name="client_secret" autocomplete="new-password" value="" placeholder="<?php echo $hasClientSecret ? htmlspecialchars(_('•••••••• (stored — leave blank to keep)')) : htmlspecialchars(_('Not set')); ?>">
+								</div>
+							</div>
+						</div>
 					</div>
-					<div class="col-md-9">
-						<input type="password" class="form-control" id="client_secret" name="client_secret" autocomplete="new-password" value="" placeholder="<?php echo $hasClientSecret ? htmlspecialchars(_('•••••••• (stored — leave blank to keep)')) : htmlspecialchars(_('Not set')); ?>">
+				</div>
+				<div class="row">
+					<div class="col-md-12">
+						<span id="client_secret-help" class="help-block fpbx-help-block"><?php echo _('Stored encrypted. Leave blank to keep the existing secret; clearing it is not possible from here once set unless you enter a new value.'); ?></span>
 					</div>
 				</div>
 			</div>
-			<div class="row"><div class="col-md-12"><span id="client_secret-help" class="help-block fpbx-help-block"><?php echo _('Stored encrypted. Leave blank to keep the existing secret; clearing it is not possible from here once set unless you enter a new value.'); ?></span></div></div>
-		</div>
-	</div>
+			<!--END Client Secret-->
 
-	<div class="row">
-		<div class="col-md-12">
-			<div class="row">
-				<div class="form-group">
-					<div class="col-md-3">
-						<label class="control-label" for="redirect_uri"><?php echo _('Authorized Redirect URI'); ?></label>
-						<i class="fa fa-question-circle fpbx-help-icon" data-for="redirect_uri"></i>
+			<!--Redirect URI-->
+			<div class="element-container">
+				<div class="row">
+					<div class="col-md-12">
+						<div class="row">
+							<div class="form-group">
+								<div class="col-md-3">
+									<label class="control-label" for="redirect_uri"><?php echo _('Authorized Redirect URI'); ?></label>
+									<i class="fa fa-question-circle fpbx-help-icon" data-for="redirect_uri"></i>
+								</div>
+								<div class="col-md-9">
+									<input type="text" class="form-control" id="redirect_uri" readonly onclick="this.select();" value="<?php echo htmlspecialchars($redirectUri); ?>">
+								</div>
+							</div>
+						</div>
 					</div>
-					<div class="col-md-9">
-						<input type="text" class="form-control" id="redirect_uri" readonly onclick="this.select();" value="<?php echo htmlspecialchars($redirectUri); ?>">
+				</div>
+				<div class="row">
+					<div class="col-md-12">
+						<span id="redirect_uri-help" class="help-block fpbx-help-block"><?php echo _('Add this exact value to the Authorized redirect URIs of your Google OAuth client. Requires a public HTTPS FQDN.'); ?></span>
 					</div>
 				</div>
 			</div>
-			<div class="row"><div class="col-md-12"><span id="redirect_uri-help" class="help-block fpbx-help-block"><?php echo _('Add this exact value to the Authorized redirect URIs of your Google OAuth client. Requires a public HTTPS FQDN.'); ?></span></div></div>
-		</div>
-	</div>
+			<!--END Redirect URI-->
 
-	<hr>
-
-	<div class="row">
-		<div class="col-md-12">
-			<div class="row">
-				<div class="form-group">
-					<div class="col-md-3">
-						<label class="control-label" for="frequency"><?php echo _('Default Sync Frequency'); ?></label>
-						<i class="fa fa-question-circle fpbx-help-icon" data-for="frequency"></i>
+			<!--Default Sync Frequency-->
+			<div class="element-container">
+				<div class="row">
+					<div class="col-md-12">
+						<div class="row">
+							<div class="form-group">
+								<div class="col-md-3">
+									<label class="control-label" for="frequency"><?php echo _('Default Sync Frequency'); ?></label>
+									<i class="fa fa-question-circle fpbx-help-icon" data-for="frequency"></i>
+								</div>
+								<div class="col-md-9">
+									<select class="form-control" id="frequency" name="frequency">
+										<option value="hourly"<?php echo $freq === 'hourly' ? ' selected' : ''; ?>><?php echo _('Hourly'); ?></option>
+										<option value="daily"<?php echo $freq === 'daily' ? ' selected' : ''; ?>><?php echo _('Daily'); ?></option>
+										<option value="weekly"<?php echo $freq === 'weekly' ? ' selected' : ''; ?>><?php echo _('Weekly'); ?></option>
+									</select>
+								</div>
+							</div>
+						</div>
 					</div>
-					<div class="col-md-9">
-						<select class="form-control" id="frequency" name="frequency">
-							<option value="hourly"<?php echo $freq === 'hourly' ? ' selected' : ''; ?>><?php echo _('Hourly'); ?></option>
-							<option value="daily"<?php echo $freq === 'daily' ? ' selected' : ''; ?>><?php echo _('Daily'); ?></option>
-							<option value="weekly"<?php echo $freq === 'weekly' ? ' selected' : ''; ?>><?php echo _('Weekly'); ?></option>
-						</select>
+				</div>
+				<div class="row">
+					<div class="col-md-12">
+						<span id="frequency-help" class="help-block fpbx-help-block"><?php echo _('System-wide default schedule. Users may override this in UCP.'); ?></span>
 					</div>
 				</div>
 			</div>
-			<div class="row"><div class="col-md-12"><span id="frequency-help" class="help-block fpbx-help-block"><?php echo _('System-wide default schedule. Users may override this in UCP.'); ?></span></div></div>
-		</div>
-	</div>
+			<!--END Default Sync Frequency-->
 
-	<div class="row gcs-freq-time"<?php echo $freq === 'hourly' ? ' style="display:none;"' : ''; ?>>
-		<div class="col-md-12">
-			<div class="row">
-				<div class="form-group">
-					<div class="col-md-3">
-						<label class="control-label" for="freq_time"><?php echo _('Time of Day'); ?></label>
+			<!--Time of Day-->
+			<div class="element-container gcs-freq-time"<?php echo $freq === 'hourly' ? ' style="display:none;"' : ''; ?>>
+				<div class="row">
+					<div class="col-md-12">
+						<div class="row">
+							<div class="form-group">
+								<div class="col-md-3">
+									<label class="control-label" for="freq_time"><?php echo _('Time of Day'); ?></label>
+									<i class="fa fa-question-circle fpbx-help-icon" data-for="freq_time"></i>
+								</div>
+								<div class="col-md-9">
+									<input type="time" class="form-control" id="freq_time" name="freq_time" value="<?php echo htmlspecialchars($frequency['time']); ?>">
+								</div>
+							</div>
+						</div>
 					</div>
-					<div class="col-md-9">
-						<input type="time" class="form-control" id="freq_time" name="freq_time" value="<?php echo htmlspecialchars($frequency['time']); ?>">
+				</div>
+				<div class="row">
+					<div class="col-md-12">
+						<span id="freq_time-help" class="help-block fpbx-help-block"><?php echo _('Time of day to run daily and weekly syncs.'); ?></span>
 					</div>
 				</div>
 			</div>
-		</div>
-	</div>
+			<!--END Time of Day-->
 
-	<div class="row gcs-freq-dow"<?php echo $freq === 'weekly' ? '' : ' style="display:none;"'; ?>>
-		<div class="col-md-12">
-			<div class="row">
-				<div class="form-group">
-					<div class="col-md-3">
-						<label class="control-label" for="freq_dow"><?php echo _('Day of Week'); ?></label>
+			<!--Day of Week-->
+			<div class="element-container gcs-freq-dow"<?php echo $freq === 'weekly' ? '' : ' style="display:none;"'; ?>>
+				<div class="row">
+					<div class="col-md-12">
+						<div class="row">
+							<div class="form-group">
+								<div class="col-md-3">
+									<label class="control-label" for="freq_dow"><?php echo _('Day of Week'); ?></label>
+									<i class="fa fa-question-circle fpbx-help-icon" data-for="freq_dow"></i>
+								</div>
+								<div class="col-md-9">
+									<select class="form-control" id="freq_dow" name="freq_dow">
+										<?php foreach ($daysOfWeek as $dow => $label) { ?>
+											<option value="<?php echo (int) $dow; ?>"<?php echo (int) $frequency['dow'] === (int) $dow ? ' selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+										<?php } ?>
+									</select>
+								</div>
+							</div>
+						</div>
 					</div>
-					<div class="col-md-9">
-						<select class="form-control" id="freq_dow" name="freq_dow">
-							<?php foreach ($daysOfWeek as $dow => $label) { ?>
-								<option value="<?php echo (int) $dow; ?>"<?php echo (int) $frequency['dow'] === (int) $dow ? ' selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
-							<?php } ?>
-						</select>
+				</div>
+				<div class="row">
+					<div class="col-md-12">
+						<span id="freq_dow-help" class="help-block fpbx-help-block"><?php echo _('Day of week to run weekly syncs.'); ?></span>
 					</div>
 				</div>
 			</div>
-		</div>
+			<!--END Day of Week-->
+		</form>
 	</div>
 </div>
-</form>
 
 <script type="text/javascript">
 	(function() {
 		function toggleFreqFields() {
-			var v = document.getElementById('frequency').value;
+			var sel = document.getElementById('frequency');
+			if (!sel) {
+				return;
+			}
+			var v = sel.value;
 			document.querySelector('.gcs-freq-time').style.display = (v === 'hourly') ? 'none' : '';
 			document.querySelector('.gcs-freq-dow').style.display = (v === 'weekly') ? '' : 'none';
 		}
