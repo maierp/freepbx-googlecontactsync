@@ -30,6 +30,7 @@ use BMO;
 use FreePBX_Helpers;
 use FreePBX\modules\Googlecontactsync\Lib\TokenStore;
 use FreePBX\modules\Googlecontactsync\Lib\GoogleClientFactory;
+use FreePBX\modules\Googlecontactsync\Lib\PeopleSync;
 
 class Googlecontactsync extends FreePBX_Helpers implements BMO {
 
@@ -707,10 +708,37 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	// Sync (delegates to Lib\PeopleSync) //
 	// ///////////////////////////////// //
 
+	/**
+	 * Run a full one-way sync (Google → Contact Manager) for a single user.
+	 *
+	 * @param int $uid
+	 * @return array<string,mixed> Result summary (status, counts, message).
+	 * @throws \Exception When the user has no connected Google account.
+	 */
 	public function syncUid($uid) {
+		$uid     = (int) $uid;
+		$account = $this->getAccountByUid($uid);
+		if (!$account) {
+			throw new \Exception(_('No connected Google account for this user.'));
+		}
+		return $this->getPeopleSync()->syncAccount($account);
 	}
 
 	public function runDueSyncs() {
+		// Implemented in M5 (scheduling).
+	}
+
+	/**
+	 * Build the sync engine with its collaborators (Contact Manager BMO, the
+	 * module's PDO handle, the encryption helper, and the CM spool tmp dir used
+	 * for staging contact photos).
+	 *
+	 * @return PeopleSync
+	 */
+	private function getPeopleSync() {
+		$spool  = (string) $this->freepbx->Config->get('ASTSPOOLDIR');
+		$tmpDir = ($spool !== '') ? rtrim($spool, '/').'/tmp' : '';
+		return new PeopleSync($this, $this->freepbx->Contactmanager, $this->db, $this->getTokenStore(), $tmpDir);
 	}
 
 	// ///////////////////////////////// //
