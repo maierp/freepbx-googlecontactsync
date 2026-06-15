@@ -68,6 +68,11 @@ class PeopleSyncTest extends TestCase {
 			.' resource_name TEXT, etag TEXT, entryid INTEGER, groupid INTEGER,'
 			.' last_synced INTEGER)'
 		);
+		// Mirror the production unique key (module.xml `acct_resource`) so the
+		// suite exercises the same constraint the live schema enforces.
+		$this->db->exec(
+			'CREATE UNIQUE INDEX acct_resource ON googlecontactsync_contacts (account_id, resource_name)'
+		);
 		$this->db->exec(
 			'CREATE TABLE googlecontactsync_logs ('
 			.' id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER, uid INTEGER,'
@@ -323,6 +328,25 @@ class PeopleSyncTest extends TestCase {
 		$this->assertSame('TOKEN-NEW', $this->account($accountId)['sync_token']);
 		// Clean import must be a full sync (no stored token sent to the API).
 		$this->assertArrayNotHasKey('syncToken', $conns->calls[0]);
+	}
+
+	public function testInsertMappingIsIdempotentUnderUniqueConstraint(): void {
+		// Regression: a reused account id (after disconnect/reconnect) or an
+		// overlapping run could leave a stale mapping for the same
+		// (account_id, resource_name). The insert must replace it rather than
+		// abort with a 1062/23000 duplicate-key error.
+		$accountId = $this->seedAccount('');
+		$engine    = $this->engine(new FakePeopleConnections(array()));
+
+		$insert = new \ReflectionMethod(PeopleSync::class, 'insertMapping');
+		$insert->setAccessible(true);
+
+		$insert->invoke($engine, $accountId, 'people/c912', 'etag-old', 201, self::GROUP['id']);
+		// Second insert for the same resource name must not throw.
+		$insert->invoke($engine, $accountId, 'people/c912', 'etag-new', 202, self::GROUP['id']);
+
+		$this->assertSame(1, $this->mappingCount($accountId), 'Only one mapping row must remain');
+		$this->assertSame('etag-new', $this->mappingEtag($accountId, 'people/c912'), 'Mapping must reflect the latest insert');
 	}
 }
 

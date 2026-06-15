@@ -179,17 +179,73 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	}
 
 	public function ajaxRequest($req, &$setting) {
-		return false;
-	}
-
-	public function ajaxHandler() {
-		return false;
+		switch ($req) {
+			case 'syncnow':
+			case 'disconnect':
+			case 'clearlogs':
+				// Admin-authenticated commands; keep the default authenticate=true
+				// so the framework gates them behind admin login + referer check.
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	/**
-	 * Render the admin page (Settings tab).
+	 * Handle admin AJAX commands for the Users and Logs tabs. Returns an
+	 * associative array the framework serialises to JSON. All commands are
+	 * gated behind admin authentication by the Ajax dispatcher.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function ajaxHandler() {
+		$command = isset($_REQUEST['command']) ? (string) $_REQUEST['command'] : '';
+		switch ($command) {
+			case 'syncnow':
+				$uid = isset($_POST['uid']) ? (int) $_POST['uid'] : 0;
+				if ($uid <= 0 || !$this->getAccountByUid($uid)) {
+					return array('status' => false, 'message' => _('Unknown account.'));
+				}
+				try {
+					$res = $this->syncUid($uid, false);
+					$ok  = !empty($res['status']);
+					return array(
+						'status'  => $ok,
+						'message' => $ok ? _('Sync completed.') : _('The sync did not complete. See the Logs tab for details.'),
+					);
+				} catch (\Exception $e) {
+					return array('status' => false, 'message' => _('The sync did not complete. See the Logs tab for details.'));
+				}
+
+			case 'disconnect':
+				$uid = isset($_POST['uid']) ? (int) $_POST['uid'] : 0;
+				if ($uid <= 0) {
+					return array('status' => false, 'message' => _('Unknown account.'));
+				}
+				$this->disconnect($uid);
+				return array('status' => true, 'message' => _('Account disconnected.'));
+
+			case 'clearlogs':
+				$days = isset($_POST['days']) ? (int) $_POST['days'] : 30;
+				$removed = $this->clearOldLogs($days);
+				return array(
+					'status'  => true,
+					'message' => sprintf(_('Removed %d log entr%s.'), $removed, $removed === 1 ? 'y' : 'ies'),
+					'removed' => $removed,
+				);
+		}
+		return array('status' => false, 'message' => _('Unknown request.'));
+	}
+
+	/**
+	 * Render the admin page (Settings, Users, and Logs tabs).
 	 */
 	public function showPage() {
+		$request     = $_REQUEST;
+		$allowedTabs = array('settings', 'users', 'logs');
+		$activeTab   = (isset($request['tab']) && in_array($request['tab'], $allowedTabs, true))
+			? (string) $request['tab'] : 'settings';
+
 		$settings = load_view(__DIR__.'/views/settings.php', array(
 			'clientId'           => $this->getClientId(),
 			'hasClientSecret'    => $this->hasClientSecret(),
@@ -198,10 +254,244 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 			'frequency'          => $this->getGlobalFrequency(),
 			'daysOfWeek'         => $this->getDaysOfWeek(),
 		));
-		return load_view(__DIR__.'/views/main.php', array(
-			'message'  => $this->message,
-			'settings' => $settings,
+
+		$users = load_view(__DIR__.'/views/users.php', array(
+			'rows' => $this->getUsersTabData(),
 		));
+
+		$logUid    = (isset($request['logs_uid']) && $request['logs_uid'] !== '') ? (int) $request['logs_uid'] : null;
+		$logStatus = (isset($request['logs_status']) && in_array($request['logs_status'], array('ok', 'error'), true))
+			? (string) $request['logs_status'] : null;
+		$perPage    = 25;
+		$total      = $this->countLogs($logUid, $logStatus);
+		$totalPages = max(1, (int) ceil($total / $perPage));
+		$page       = isset($request['logs_page']) ? max(1, (int) $request['logs_page']) : 1;
+		if ($page > $totalPages) {
+			$page = $totalPages;
+		}
+		$offset = ($page - 1) * $perPage;
+
+		$logs = load_view(__DIR__.'/views/logs.php', array(
+			'rows'         => $this->getLogsTabData($logUid, $logStatus, $perPage, $offset),
+			'userOptions'  => $this->getLogUserFilterOptions(),
+			'filterUid'    => $logUid,
+			'filterStatus' => $logStatus,
+			'page'         => $page,
+			'totalPages'   => $totalPages,
+			'total'        => $total,
+		));
+
+		return load_view(__DIR__.'/views/main.php', array(
+			'message'   => $this->message,
+			'activeTab' => $activeTab,
+			'settings'  => $settings,
+			'users'     => $users,
+			'logs'      => $logs,
+		));
+	}
+
+	// ///////////////////////////////// //
+	// Admin Users + Logs tabs (M7)       //
+	// ///////////////////////////////// //
+
+	/**
+	 * Build the per-user rows for the admin Users tab from the stored accounts.
+	 * No secrets are included — only display-safe status fields.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function getUsersTabData() {
+		$rows = array();
+		foreach ($this->getAllAccounts() as $account) {
+			$uid = (int) $account['uid'];
+			$eff = $this->getEffectiveFrequency($account);
+			$rows[] = array(
+				'uid'               => $uid,
+				'user'              => $this->getUserDisplay($uid),
+				'email'             => (string) ($account['google_email'] ?? ''),
+				'group'             => $this->getGroupLabel($account),
+				'frequency'         => $this->describeFrequency($eff),
+				'frequencyOverride' => in_array((string) ($account['frequency'] ?? ''), self::FREQUENCIES, true),
+				'enabled'           => !empty($account['enabled']),
+				'lastSync'          => (!empty($account['last_sync'])) ? (int) $account['last_sync'] : null,
+				'status'            => (string) ($account['last_status'] ?? ''),
+				'message'           => (string) ($account['last_message'] ?? ''),
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Friendly display name for a userman uid (display name, else username, else
+	 * a synthetic label). Never throws when Userman cannot resolve the id.
+	 *
+	 * @param int $uid
+	 * @return string
+	 */
+	public function getUserDisplay($uid) {
+		$uid = (int) $uid;
+		try {
+			$user = $this->freepbx->Userman->getUserByID($uid);
+		} catch (\Exception $e) {
+			$user = null;
+		}
+		if (is_array($user)) {
+			if (!empty($user['displayname'])) {
+				return (string) $user['displayname'];
+			}
+			if (!empty($user['username'])) {
+				return (string) $user['username'];
+			}
+		}
+		return sprintf(_('User #%d'), $uid);
+	}
+
+	/**
+	 * Resolve the Contact Manager group name for an account's import target.
+	 *
+	 * @param array<string,mixed> $account
+	 * @return string Empty string when no target is set.
+	 */
+	private function getGroupLabel($account) {
+		$gid = isset($account['target_groupid']) ? (int) $account['target_groupid'] : 0;
+		if ($gid <= 0) {
+			return '';
+		}
+		try {
+			$group = $this->freepbx->Contactmanager->getGroupByID($gid);
+		} catch (\Exception $e) {
+			$group = null;
+		}
+		if (!empty($group['name'])) {
+			return (string) $group['name'];
+		}
+		return '#'.$gid;
+	}
+
+	/**
+	 * Human-readable description of an effective schedule.
+	 *
+	 * @param array{frequency:string,time:string,dow:int} $eff
+	 * @return string
+	 */
+	private function describeFrequency($eff) {
+		switch ($eff['frequency']) {
+			case 'hourly':
+				return _('Hourly');
+			case 'weekly':
+				$days = $this->getDaysOfWeek();
+				$day  = isset($days[$eff['dow']]) ? $days[$eff['dow']] : (string) $eff['dow'];
+				return sprintf(_('Weekly · %s · %s'), $day, $eff['time']);
+			case 'daily':
+			default:
+				return sprintf(_('Daily · %s'), $eff['time']);
+		}
+	}
+
+	/**
+	 * Distinct userman uids that appear in the sync logs, mapped to their display
+	 * labels (used to populate the Logs tab user filter).
+	 *
+	 * @return array<int,string>
+	 */
+	public function getLogUserFilterOptions() {
+		$sth = $this->db->prepare('SELECT DISTINCT uid FROM googlecontactsync_logs WHERE uid IS NOT NULL ORDER BY uid');
+		$sth->execute();
+		$out = array();
+		foreach ($sth->fetchAll(\PDO::FETCH_COLUMN) as $uid) {
+			$out[(int) $uid] = $this->getUserDisplay((int) $uid);
+		}
+		return $out;
+	}
+
+	/**
+	 * Build the WHERE clause and bound parameters for log filtering.
+	 *
+	 * @param int|null    $uid
+	 * @param string|null $status 'ok' or 'error'.
+	 * @return array{0:string,1:array<int,mixed>}
+	 */
+	private function logFilterClause($uid, $status) {
+		$conds  = array();
+		$params = array();
+		if ($uid !== null) {
+			$conds[]  = 'uid = ?';
+			$params[] = (int) $uid;
+		}
+		if ($status !== null && in_array($status, array('ok', 'error'), true)) {
+			$conds[]  = 'status = ?';
+			$params[] = $status;
+		}
+		$where = $conds ? ('WHERE '.implode(' AND ', $conds)) : '';
+		return array($where, $params);
+	}
+
+	/**
+	 * Count log rows matching the given filters.
+	 *
+	 * @param int|null    $uid
+	 * @param string|null $status
+	 * @return int
+	 */
+	public function countLogs($uid = null, $status = null) {
+		list($where, $params) = $this->logFilterClause($uid, $status);
+		$sth = $this->db->prepare('SELECT COUNT(*) FROM googlecontactsync_logs '.$where);
+		$sth->execute($params);
+		return (int) $sth->fetchColumn();
+	}
+
+	/**
+	 * Fetch a page of log rows (newest first) for the admin Logs tab, resolving
+	 * each row's user label. Messages are already redacted at write time.
+	 *
+	 * @param int|null    $uid
+	 * @param string|null $status
+	 * @param int         $limit
+	 * @param int         $offset
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function getLogsTabData($uid = null, $status = null, $limit = 25, $offset = 0) {
+		list($where, $params) = $this->logFilterClause($uid, $status);
+		$sql = 'SELECT * FROM googlecontactsync_logs '.$where.' ORDER BY id DESC LIMIT '.(int) $limit.' OFFSET '.(int) $offset;
+		$sth = $this->db->prepare($sql);
+		$sth->execute($params);
+		$rows = array();
+		foreach ($sth->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+			$logUid = (isset($r['uid']) && $r['uid'] !== null) ? (int) $r['uid'] : null;
+			$rows[] = array(
+				'id'       => (int) $r['id'],
+				'uid'      => $logUid,
+				'user'     => $logUid !== null ? $this->getUserDisplay($logUid) : '',
+				'started'  => isset($r['started']) ? (int) $r['started'] : 0,
+				'finished' => isset($r['finished']) ? (int) $r['finished'] : 0,
+				'status'   => (string) ($r['status'] ?? ''),
+				'added'    => (int) ($r['added'] ?? 0),
+				'updated'  => (int) ($r['updated'] ?? 0),
+				'deleted'  => (int) ($r['deleted'] ?? 0),
+				'message'  => (string) ($r['message'] ?? ''),
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Delete old log rows. A positive $days removes entries finished more than
+	 * that many days ago; a non-positive value clears every log row.
+	 *
+	 * @param int $days
+	 * @return int Number of rows removed.
+	 */
+	public function clearOldLogs($days = 30) {
+		$days = (int) $days;
+		if ($days <= 0) {
+			$sth = $this->db->prepare('DELETE FROM googlecontactsync_logs');
+			$sth->execute();
+		} else {
+			$cutoff = time() - ($days * 86400);
+			$sth = $this->db->prepare('DELETE FROM googlecontactsync_logs WHERE finished IS NOT NULL AND finished < ?');
+			$sth->execute(array($cutoff));
+		}
+		return (int) $sth->rowCount();
 	}
 
 	/**
@@ -527,6 +817,19 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 				.' VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)'
 			);
 			$sth->execute(array($uid, $sub, $email, $accessEnc, $refreshEnc, $tokenExp, 'ok', $now, $now));
+
+			// A brand-new account id can re-use the auto-increment value of a
+			// previously disconnected account (e.g. after a disconnect/reconnect
+			// cycle). Purge any mapping/log rows still keyed to that id so the
+			// fresh connection starts from a guaranteed clean slate and its first
+			// sync cannot collide with stale `googlecontactsync_contacts` rows.
+			$newId = (int) $this->db->lastInsertId();
+			if ($newId > 0) {
+				$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE account_id = ?');
+				$sth->execute(array($newId));
+				$sth = $this->db->prepare('DELETE FROM googlecontactsync_logs WHERE account_id = ?');
+				$sth->execute(array($newId));
+			}
 		}
 		return true;
 	}

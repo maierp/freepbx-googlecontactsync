@@ -23,16 +23,32 @@
 <?php if (!empty($message) && is_array($message)) { ?>
 	<div class="alert alert-<?php echo htmlspecialchars($message['type']); ?>"><?php echo htmlspecialchars($message['message']); ?></div>
 <?php } ?>
+<?php
+	$activeTab = isset($activeTab) && in_array($activeTab, array('settings', 'users', 'logs'), true) ? $activeTab : 'settings';
+	$tabs = array(
+		'settings' => _('Settings'),
+		'users'    => _('Users'),
+		'logs'     => _('Logs'),
+	);
+?>
 <div class="container-fluid">
 	<h1><?php echo _('Google Contact Sync'); ?></h1>
 	<div class="row">
 		<div class="col-sm-12">
 			<ul class="nav nav-tabs" role="tablist">
-				<li class="active" role="presentation"><a href="#settings" aria-controls="settings" role="tab" data-toggle="tab"><?php echo _('Settings'); ?></a></li>
+				<?php foreach ($tabs as $id => $label) { ?>
+					<li class="<?php echo $activeTab === $id ? 'active' : ''; ?>" role="presentation"><a href="#<?php echo $id; ?>" aria-controls="<?php echo $id; ?>" role="tab" data-toggle="tab"><?php echo htmlspecialchars($label); ?></a></li>
+				<?php } ?>
 			</ul>
 			<div class="tab-content">
-				<div id="settings" class="tab-pane active" role="tabpanel">
+				<div id="settings" class="tab-pane <?php echo $activeTab === 'settings' ? 'active' : ''; ?>" role="tabpanel">
 					<?php echo $settings; ?>
+				</div>
+				<div id="users" class="tab-pane <?php echo $activeTab === 'users' ? 'active' : ''; ?>" role="tabpanel">
+					<?php echo $users; ?>
+				</div>
+				<div id="logs" class="tab-pane <?php echo $activeTab === 'logs' ? 'active' : ''; ?>" role="tabpanel">
+					<?php echo $logs; ?>
 				</div>
 			</div>
 		</div>

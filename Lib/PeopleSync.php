@@ -584,7 +584,26 @@ class PeopleSync {
 		return $row !== false ? $row : null;
 	}
 
+	/**
+	 * Persist a contact mapping idempotently. Any pre-existing row for the same
+	 * (account_id, resource_name) is removed first, so a reused account id (after
+	 * a disconnect/reconnect), an interrupted prior run, or an overlapping sync
+	 * can never trip the `acct_resource` unique constraint and abort the run.
+	 * Implemented with DELETE-then-INSERT to stay portable across MySQL and the
+	 * SQLite used by the test suite.
+	 *
+	 * @param int    $accountId
+	 * @param string $resourceName
+	 * @param string $etag
+	 * @param int    $entryId
+	 * @param int    $groupId
+	 */
 	private function insertMapping($accountId, $resourceName, $etag, $entryId, $groupId) {
+		$del = $this->db->prepare(
+			'DELETE FROM googlecontactsync_contacts WHERE account_id = ? AND resource_name = ?'
+		);
+		$del->execute(array((int) $accountId, (string) $resourceName));
+
 		$sth = $this->db->prepare(
 			'INSERT INTO googlecontactsync_contacts'
 			.' (account_id, resource_name, etag, entryid, groupid, last_synced)'
