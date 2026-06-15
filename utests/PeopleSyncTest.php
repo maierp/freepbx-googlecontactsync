@@ -372,6 +372,21 @@ class PeopleSyncTest extends TestCase {
 		$this->assertSame(1, $this->mappingCount($accountId), 'Only one mapping row must remain');
 		$this->assertSame('etag-new', $this->mappingEtag($accountId, 'people/c912'), 'Mapping must reflect the latest insert');
 	}
+
+	public function testErrorMessagesAreRedactedOfTokenMaterial(): void {
+		// §9: tokens/secrets must never leak into stored logs or surfaced errors.
+		$engine = $this->engine(new FakePeopleConnections(array()));
+		$redact = new \ReflectionMethod(PeopleSync::class, 'redact');
+		$redact->setAccessible(true);
+
+		$dirty = 'Request failed: access_token=ya29.A0ARrdaSecretValue123 refresh_token: 1//09xSecretRefresh and client_secret=GOCSPX-topsecret';
+		$clean = (string) $redact->invoke($engine, $dirty);
+
+		$this->assertStringNotContainsString('ya29.A0ARrdaSecretValue123', $clean);
+		$this->assertStringNotContainsString('1//09xSecretRefresh', $clean);
+		$this->assertStringNotContainsString('GOCSPX-topsecret', $clean);
+		$this->assertStringContainsString('[redacted]', $clean);
+	}
 }
 
 /**

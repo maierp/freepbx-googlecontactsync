@@ -223,12 +223,14 @@ class Googlecontactsync extends Modules {
 	 * Redirect back to a clean UCP URL (drops the OAuth query parameters so a
 	 * reload cannot replay the code/state).
 	 *
+	 * A root-relative target is used deliberately: the browser resolves it
+	 * against the current origin, so a forged `Host` header cannot turn this
+	 * into an open redirect to an attacker-controlled domain.
+	 *
 	 * @param array<string,string> $params
 	 */
 	private function redirectClean($params) {
-		$proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-		$host  = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
-		$url   = $proto.'://'.$host.'/ucp/index.php';
+		$url = '/ucp/index.php';
 		if (!empty($params)) {
 			$url .= '?'.http_build_query($params);
 		}

@@ -34,8 +34,18 @@ if (!interface_exists('BMO')) {
 if (!class_exists('FreePBX_Helpers')) {
 	#[\AllowDynamicProperties]
 	class FreePBX_Helpers {
-		public function getConfig($key, $id = null) { return ''; }
-		public function setConfig($key, $value = false, $id = null) { return true; }
+		/** @var array<string,mixed> In-memory KV store so tests exercise real persistence. */
+		private $kvStore = array();
+		private function kvKey($key, $id) { return ($id === null ? '' : ((string) $id).'|').(string) $key; }
+		public function getConfig($key, $id = null) {
+			$k = $this->kvKey($key, $id);
+			return array_key_exists($k, $this->kvStore) ? $this->kvStore[$k] : '';
+		}
+		public function setConfig($key, $value = false, $id = null) {
+			$k = $this->kvKey($key, $id);
+			if ($value === false) { unset($this->kvStore[$k]); } else { $this->kvStore[$k] = $value; }
+			return true;
+		}
 		public function delConfig($key, $id = null) { return $this->setConfig($key, false, $id); }
 	}
 }

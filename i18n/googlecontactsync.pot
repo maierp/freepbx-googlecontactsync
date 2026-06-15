@@ -1,0 +1,623 @@
+# Google Contact Sync — FreePBX module
+# Copyright (C) 2026 Dr. Patrick Maier, Softwareentwicklung Patrick Maier
+# This file is distributed under the same GPLv3+ license as the module.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: googlecontactsync 1.0.0\n"
+"Report-Msgid-Bugs-To: mail@se-pm.de\n"
+"POT-Creation-Date: 2026-06-15 17:51+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: Console/Googlecontactsync.class.php:92
+msgid "(disabled)"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:214
+msgid "(not set)"
+msgstr ""
+
+#: Googlecontactsync.class.php:1120
+msgid "A secure (HTTPS) connection is required to connect a Google account."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:105
+msgid "A valid --uid is required."
+msgstr ""
+
+#: Googlecontactsync.class.php:279
+msgid "Account disconnected."
+msgstr ""
+
+#: views/users.php:58
+msgid "Actions"
+msgstr ""
+
+#: views/settings.php:104
+msgid "Add this exact value to the Authorized redirect URIs of your Google OAuth client. Must be a public HTTPS URL ending in /ucp/index.php. Leave blank to use the auto-detected default shown as placeholder."
+msgstr ""
+
+#: views/logs.php:88
+msgid "Added"
+msgstr ""
+
+#: views/logs.php:64
+msgid "All"
+msgstr ""
+
+#: views/logs.php:55
+msgid "All users"
+msgstr ""
+
+#: views/settings.php:87
+msgid "Authorized Redirect URI"
+msgstr ""
+
+#: views/logs.php:73
+msgid "Clear logs older than"
+msgstr ""
+
+#: views/logs.php:78
+msgid "Clear old logs"
+msgstr ""
+
+#: ucp/views/widget.php:175
+msgid "Connect Google Account"
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:253
+msgid "Connect your Google account to import contacts."
+msgstr ""
+
+#: ucp/views/widget.php:64
+msgid "Connected as"
+msgstr ""
+
+#: Lib/PeopleSync.php:266
+msgid "Could not create a Contact Manager group for the import."
+msgstr ""
+
+#: Googlecontactsync.class.php:1183
+msgid "Could not verify the Google account identity."
+msgstr ""
+
+#: ucp/views/widget.php:108
+msgid "Create new private group \"Google Contacts\""
+msgstr ""
+
+#: views/settings.php:123 ucp/views/widget.php:34
+msgid "Daily"
+msgstr ""
+
+#: Googlecontactsync.class.php:440
+#, php-format
+msgid "Daily · %s"
+msgstr ""
+
+#: views/settings.php:171
+msgid "Day of Week"
+msgstr ""
+
+#: ucp/views/widget.php:135
+msgid "Day of week (weekly)"
+msgstr ""
+
+#: views/settings.php:187
+msgid "Day of week to run weekly syncs."
+msgstr ""
+
+#: views/settings.php:117
+msgid "Default Sync Frequency"
+msgstr ""
+
+#: views/logs.php:165
+msgid "Delete ALL log entries? This cannot be undone."
+msgstr ""
+
+#: views/logs.php:164
+msgid "Delete log entries older than the selected number of days?"
+msgstr ""
+
+#: ucp/views/widget.php:158
+msgid "Delete the contacts imported by this account and re-import them all from Google?"
+msgstr ""
+
+#: views/logs.php:90
+msgid "Deleted"
+msgstr ""
+
+#: views/users.php:91
+msgid "Disabled"
+msgstr ""
+
+#: views/users.php:103 ucp/views/widget.php:164
+msgid "Disconnect"
+msgstr ""
+
+#: views/users.php:145
+msgid "Disconnect the Google account for"
+msgstr ""
+
+#: ucp/views/widget.php:163
+msgid "Disconnect this Google account?"
+msgstr ""
+
+#: views/logs.php:66 views/logs.php:108
+msgid "Error"
+msgstr ""
+
+#: Googlecontactsync.class.php:1178
+msgid "Failed to obtain a Google access token."
+msgstr ""
+
+#: views/logs.php:69
+msgid "Filter"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:41
+msgid "Force-sync every enabled account regardless of schedule"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:40
+msgid "Force-sync one userman user now"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:84 views/users.php:55
+msgid "Frequency"
+msgstr ""
+
+#: Googlecontactsync.class.php:562
+msgid "Friday"
+msgstr ""
+
+#: ucp/views/widget.php:159
+msgid "Full sync"
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:177
+msgid "Full sync completed."
+msgstr ""
+
+#: views/users.php:53
+msgid "Google Account"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:37 views/main.php:35
+#: ucp/Googlecontactsync.class.php:49 ucp/Googlecontactsync.class.php:242
+#: ucp/Googlecontactsync.class.php:250 ucp/Googlecontactsync.class.php:291
+msgid "Google Contact Sync"
+msgstr ""
+
+#: ucp/views/widget.php:179
+msgid "Google Contact Sync has not been configured by your administrator yet."
+msgstr ""
+
+#: Googlecontactsync.class.php:966
+msgid "Google Contacts"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:83
+msgid "Google Email"
+msgstr ""
+
+#: views/settings.php:37
+msgid "Google OAuth Client ID"
+msgstr ""
+
+#: views/settings.php:62
+msgid "Google OAuth Client Secret"
+msgstr ""
+
+#: Googlecontactsync.class.php:1117
+msgid "Google OAuth credentials are not configured. Please ask your administrator to set them up."
+msgstr ""
+
+#: Lib/PeopleSync.php:225
+msgid "Google access expired and no refresh token is available. Please reconnect your account."
+msgstr ""
+
+#: ucp/views/widget.php:28
+msgid "Google access was not granted."
+msgstr ""
+
+#: Lib/PeopleSync.php:402
+msgid "Google access was revoked or has expired. Please reconnect your Google account."
+msgstr ""
+
+#: Lib/PeopleSync.php:229
+msgid "Google access was revoked. Please reconnect your account."
+msgstr ""
+
+#: Googlecontactsync.class.php:433 views/settings.php:122
+#: ucp/views/widget.php:33
+msgid "Hourly"
+msgstr ""
+
+#: ucp/views/widget.php:98
+msgid "Import into group"
+msgstr ""
+
+#: ucp/views/widget.php:173
+msgid "Import your Google Contacts into your PBX contacts."
+msgstr ""
+
+#: Lib/PeopleSync.php:156
+#, php-format
+msgid "Imported %d, updated %d, deleted %d (%d unchanged)."
+msgstr ""
+
+#: Googlecontactsync.class.php:1234
+msgid "Invalid OAuth state."
+msgstr ""
+
+#: Googlecontactsync.class.php:1114
+msgid "Invalid user."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:84 views/users.php:56
+msgid "Last Sync"
+msgstr ""
+
+#: ucp/views/widget.php:80
+msgid "Last sync error:"
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:217 ucp/views/widget.php:69
+msgid "Last sync:"
+msgstr ""
+
+#: views/main.php:31
+msgid "Logs"
+msgstr ""
+
+#: Googlecontactsync.class.php:1243
+msgid "Malformed OAuth state."
+msgstr ""
+
+#: views/logs.php:91
+msgid "Message"
+msgstr ""
+
+#: Googlecontactsync.class.php:1172
+msgid "Missing authorization code."
+msgstr ""
+
+#: Googlecontactsync.class.php:558
+msgid "Monday"
+msgstr ""
+
+#: views/users.php:84
+msgid "Never"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:149
+msgid "No accounts are due to sync."
+msgstr ""
+
+#: Googlecontactsync.class.php:1340
+msgid "No connected Google account for this user."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:77
+msgid "No connected Google accounts."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:124
+msgid "No enabled Google accounts to sync."
+msgstr ""
+
+#: views/logs.php:97
+msgid "No log entries match the current filter."
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:215 ucp/views/widget.php:74
+msgid "No sync has run yet."
+msgstr ""
+
+#: views/users.php:64
+msgid "No users have connected a Google account yet."
+msgstr ""
+
+#: views/settings.php:66 views/users.php:71
+msgid "Not set"
+msgstr ""
+
+#: Googlecontactsync.class.php:1169
+msgid "OAuth session mismatch."
+msgstr ""
+
+#: Googlecontactsync.class.php:1239
+msgid "OAuth state signature mismatch."
+msgstr ""
+
+#: views/logs.php:65 views/logs.php:110
+msgid "OK"
+msgstr ""
+
+#: views/users.php:93
+msgid "Pending"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:43
+msgid "Print account status table"
+msgstr ""
+
+#: ucp/views/widget.php:168
+msgid "Reconnect"
+msgstr ""
+
+#: ucp/views/widget.php:85
+msgid "Reconnect Google Account"
+msgstr ""
+
+#: Googlecontactsync.class.php:286
+#, php-format
+msgid "Removed %d log entr%s."
+msgstr ""
+
+#: Googlecontactsync.class.php:223 views/logs.php:70
+msgid "Reset"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:39
+msgid "Run all accounts that are due (used by cron)"
+msgstr ""
+
+#: Googlecontactsync.class.php:563
+msgid "Saturday"
+msgstr ""
+
+#: ucp/views/widget.php:147
+msgid "Save settings"
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:133 ucp/Googlecontactsync.class.php:149
+#: ucp/Googlecontactsync.class.php:155
+msgid "Security token mismatch. Please reload the page and try again."
+msgstr ""
+
+#: views/main.php:29
+msgid "Settings"
+msgstr ""
+
+#: Googlecontactsync.class.php:206
+msgid "Settings saved, but the Redirect URI was ignored: it must be a valid HTTPS URL."
+msgstr ""
+
+#: Googlecontactsync.class.php:211
+msgid "Settings saved."
+msgstr ""
+
+#: views/logs.php:128
+#, php-format
+msgid "Showing page %d of %d (%d entries)."
+msgstr ""
+
+#: ucp/views/widget.php:29
+msgid "Something went wrong. Please try again."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:84 views/logs.php:62
+#: views/logs.php:87 views/users.php:57
+msgid "Status"
+msgstr ""
+
+#: views/settings.php:74
+msgid "Stored encrypted. Leave blank to keep the existing secret; clearing it is not possible from here once set unless you enter a new value."
+msgstr ""
+
+#: Googlecontactsync.class.php:228
+msgid "Submit"
+msgstr ""
+
+#: Googlecontactsync.class.php:557
+msgid "Sunday"
+msgstr ""
+
+#: Googlecontactsync.class.php:267 ucp/Googlecontactsync.class.php:177
+msgid "Sync completed."
+msgstr ""
+
+#: ucp/views/widget.php:114
+msgid "Sync frequency"
+msgstr ""
+
+#: views/users.php:102 ucp/views/widget.php:154
+msgid "Sync now"
+msgstr ""
+
+#: views/settings.php:133
+msgid "System-wide default schedule. Users may override this in UCP."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:83 views/users.php:54
+msgid "Target Group"
+msgstr ""
+
+#: views/settings.php:49
+msgid "The OAuth 2.0 Web application Client ID from your Google Cloud project."
+msgstr ""
+
+#: Googlecontactsync.class.php:1246
+msgid "The OAuth request expired. Please try again."
+msgstr ""
+
+#: Googlecontactsync.class.php:1253
+msgid "The OAuth state is invalid or has already been used."
+msgstr ""
+
+#: views/logs.php:176 views/users.php:136 views/users.php:155
+msgid "The request failed. Please try again."
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:185
+msgid "The sync did not complete. Please try again later."
+msgstr ""
+
+#: Googlecontactsync.class.php:267 Googlecontactsync.class.php:270
+msgid "The sync did not complete. See the Logs tab for details."
+msgstr ""
+
+#: Googlecontactsync.class.php:561
+msgid "Thursday"
+msgstr ""
+
+#: views/settings.php:146
+msgid "Time of Day"
+msgstr ""
+
+#: ucp/views/widget.php:129
+msgid "Time of day (daily/weekly)"
+msgstr ""
+
+#: views/settings.php:158
+msgid "Time of day to run daily and weekly syncs."
+msgstr ""
+
+#: Googlecontactsync.class.php:559
+msgid "Tuesday"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:83
+msgid "UID"
+msgstr ""
+
+#: Googlecontactsync.class.php:260 Googlecontactsync.class.php:276
+msgid "Unknown account."
+msgstr ""
+
+#: Googlecontactsync.class.php:290 ucp/Googlecontactsync.class.php:159
+msgid "Unknown request."
+msgstr ""
+
+#: views/logs.php:89
+msgid "Updated"
+msgstr ""
+
+#: views/settings.php:94
+msgid "Use auto-detected URL"
+msgstr ""
+
+#: views/settings.php:94
+msgid "Use default"
+msgstr ""
+
+#: ucp/views/widget.php:117
+msgid "Use system default"
+msgstr ""
+
+#: views/logs.php:53 views/logs.php:86 views/users.php:52
+msgid "User"
+msgstr ""
+
+#: Googlecontactsync.class.php:399
+#, php-format
+msgid "User #%d"
+msgstr ""
+
+#: views/main.php:30
+msgid "Users"
+msgstr ""
+
+#: views/users.php:48
+msgid "Users who have connected a Google account from UCP. Use Sync now to run an immediate sync, or Disconnect to revoke access and remove the connection."
+msgstr ""
+
+#: Googlecontactsync.class.php:560
+msgid "Wednesday"
+msgstr ""
+
+#: views/settings.php:124 ucp/views/widget.php:35
+msgid "Weekly"
+msgstr ""
+
+#: Googlecontactsync.class.php:437
+#, php-format
+msgid "Weekly · %s · %s"
+msgstr ""
+
+#: views/logs.php:85
+msgid "When"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:42
+msgid "With --uid/--all: clean full import (delete imported contacts and re-import all)"
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:124
+msgid "You are not signed in."
+msgstr ""
+
+#: ucp/views/widget.php:27
+msgid "Your Google account has been disconnected."
+msgstr ""
+
+#: ucp/views/widget.php:26
+msgid "Your Google account is now connected."
+msgstr ""
+
+#: ucp/Googlecontactsync.class.php:145
+msgid "Your settings have been saved."
+msgstr ""
+
+#: ucp/views/widget.php:43 ucp/views/widget.php:46
+msgid "at"
+msgstr ""
+
+#: views/logs.php:76
+msgid "days"
+msgstr ""
+
+#: views/users.php:77
+msgid "default"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:225
+msgid "never"
+msgstr ""
+
+#: ucp/views/widget.php:46
+msgid "on"
+msgstr ""
+
+#: views/users.php:75
+msgid "override"
+msgstr ""
+
+#: ucp/views/widget.php:104
+msgid "private"
+msgstr ""
+
+#: ucp/views/widget.php:104
+msgid "shared"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:111
+#, php-format
+msgid "uid %d: %s"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:178
+#, php-format
+msgid "uid %d: ERROR — %s"
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:170
+#, php-format
+msgid "uid %d: OK — added %d, updated %d, deleted %d."
+msgstr ""
+
+#: Console/Googlecontactsync.class.php:180
+msgid "unknown error"
+msgstr ""
+
+#: views/settings.php:66
+msgid "•••••••• (stored — leave blank to keep)"
+msgstr ""
