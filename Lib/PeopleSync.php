@@ -22,16 +22,25 @@
 
 namespace FreePBX\modules\Googlecontactsync\Lib;
 
+use Google\Service\Exception as GoogleServiceException;
 use Google\Service\PeopleService;
 use Google\Service\PeopleService\Person;
 
 /**
  * One-way sync engine: Google People API connections → Contact Manager.
  *
- * This milestone (M3) performs a **full** import — adding new contacts and
- * updating changed ones (etag-gated) into a user-selected or auto-created
- * private group, populating the `googlecontactsync_contacts` mapping table.
- * Incremental `syncToken` handling and deletion reconciliation arrive in M4.
+ * Adds new contacts, updates changed ones (etag-gated), and mirrors deletions
+ * into a user-selected or auto-created private group, maintaining the
+ * `googlecontactsync_contacts` mapping table.
+ *
+ * Syncs are **incremental** when a People API `syncToken` is stored: only
+ * changed/added/deleted contacts are returned, with deletions arriving as
+ * tombstones (`metadata.deleted == true`). The first run (no token) and any run
+ * whose token has expired (`EXPIRED_SYNC_TOKEN`) fall back to a **full** resync,
+ * after which deletions are reconciled by diffing the mapping table against the
+ * set of contacts Google returned. A fresh `nextSyncToken` is persisted after
+ * every successful run; on failure no partial token is stored so the next run
+ * can recover.
  *
  * Contact Manager is only ever mutated through its public BMO methods so its
  * caches, contact-file regeneration, and hooks stay consistent. The module's
@@ -110,16 +119,18 @@ class PeopleSync {
 		$this->markRunning($accountId);
 
 		try {
-			$service  = $this->getPeopleService($account);
-			$groupId  = $this->resolveTargetGroup($account);
-			$persons  = $this->fetchAllConnections($service);
-			$counts   = $this->reconcile($accountId, $groupId, $persons);
+			$service   = $this->getPeopleService($account);
+			$groupId   = $this->resolveTargetGroup($account);
+			$syncToken = isset($account['sync_token']) ? (string) $account['sync_token'] : '';
+			$fetch     = $this->fetchConnections($service, $syncToken);
+			$counts    = $this->reconcile($accountId, $groupId, $fetch['persons'], $fetch['incremental']);
 			$this->regenerateContactFiles($groupId);
+			$this->persistSyncToken($accountId, $fetch['nextSyncToken']);
 
 			$finished = time();
 			$message  = sprintf(
-				_('Imported %d, updated %d (%d unchanged).'),
-				$counts['added'], $counts['updated'], $counts['skipped']
+				_('Imported %d, updated %d, deleted %d (%d unchanged).'),
+				$counts['added'], $counts['updated'], $counts['deleted'], $counts['skipped']
 			);
 			$this->markStatus($accountId, 'ok', $finished, $message);
 			$this->writeLog($accountId, $uid, $started, $finished, 'ok', $counts, $message);
@@ -128,6 +139,7 @@ class PeopleSync {
 				'status'  => true,
 				'added'   => $counts['added'],
 				'updated' => $counts['updated'],
+				'deleted' => $counts['deleted'],
 				'skipped' => $counts['skipped'],
 				'message' => $message,
 			);
@@ -235,19 +247,52 @@ class PeopleSync {
 	}
 
 	/**
-	 * Fetch every connection (full, paginated) for the authenticated user.
+	 * Fetch connections, preferring an incremental sync when a `syncToken` is
+	 * stored. If the token has expired (`EXPIRED_SYNC_TOKEN`) it is discarded and
+	 * a full resync is performed instead (which also drives deletion
+	 * reconciliation, see {@see reconcile()}).
 	 *
 	 * @param PeopleService $service
-	 * @return array<int,Person>
+	 * @param string        $syncToken Stored token from a previous run ('' = none).
+	 * @return array{persons:array<int,Person>,nextSyncToken:string,incremental:bool}
 	 */
-	protected function fetchAllConnections(PeopleService $service) {
+	protected function fetchConnections(PeopleService $service, $syncToken) {
+		$syncToken = (string) $syncToken;
+		if ($syncToken !== '') {
+			try {
+				return $this->listConnections($service, $syncToken, true);
+			} catch (GoogleServiceException $e) {
+				if (!$this->isExpiredSyncToken($e)) {
+					throw $e;
+				}
+				// Expired token → fall through to a full resync.
+			}
+		}
+		return $this->listConnections($service, '', false);
+	}
+
+	/**
+	 * Page through `people.connections.list`, collecting every returned Person
+	 * and capturing the `nextSyncToken` emitted on the final page.
+	 *
+	 * @param PeopleService $service
+	 * @param string        $syncToken   Incremental token, or '' for a full list.
+	 * @param bool          $incremental Whether this is an incremental run.
+	 * @return array{persons:array<int,Person>,nextSyncToken:string,incremental:bool}
+	 */
+	private function listConnections(PeopleService $service, $syncToken, $incremental) {
 		$persons   = array();
 		$pageToken = null;
+		$nextSync  = '';
 		do {
 			$opt = array(
-				'personFields' => self::PERSON_FIELDS,
-				'pageSize'     => self::PAGE_SIZE,
+				'personFields'     => self::PERSON_FIELDS,
+				'pageSize'         => self::PAGE_SIZE,
+				'requestSyncToken' => true,
 			);
+			if ($syncToken !== '') {
+				$opt['syncToken'] = $syncToken;
+			}
 			if ($pageToken !== null) {
 				$opt['pageToken'] = $pageToken;
 			}
@@ -258,25 +303,64 @@ class PeopleSync {
 					$persons[] = $person;
 				}
 			}
+			$token = (string) $response->getNextSyncToken();
+			if ($token !== '') {
+				$nextSync = $token;
+			}
 			$pageToken = $response->getNextPageToken();
 		} while (!empty($pageToken));
 
-		return $persons;
+		return array(
+			'persons'       => $persons,
+			'nextSyncToken' => $nextSync,
+			'incremental'   => (bool) $incremental,
+		);
 	}
 
 	/**
-	 * Add new / update changed contacts and maintain the mapping table.
-	 * Deletions are out of scope for this milestone (M4).
+	 * Whether a People API error is a 400 `EXPIRED_SYNC_TOKEN` (the signal to
+	 * discard the stored token and perform a full resync).
+	 *
+	 * @param GoogleServiceException $e
+	 * @return bool
+	 */
+	private function isExpiredSyncToken(GoogleServiceException $e) {
+		if ((int) $e->getCode() !== 400) {
+			return false;
+		}
+		if (stripos((string) $e->getMessage(), 'EXPIRED_SYNC_TOKEN') !== false) {
+			return true;
+		}
+		foreach ((array) $e->getErrors() as $err) {
+			$reason = is_array($err) && isset($err['reason']) ? (string) $err['reason'] : '';
+			if (stripos($reason, 'EXPIRED_SYNC_TOKEN') !== false) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Add new / update changed / delete removed contacts and maintain the
+	 * mapping table.
+	 *
+	 * Incremental runs receive deletions as tombstones
+	 * (`metadata.deleted == true`). Full runs receive only live contacts, so
+	 * deletions are reconciled afterwards by diffing the mapping table against
+	 * the set of resource names returned this run.
 	 *
 	 * @param int               $accountId
 	 * @param int               $groupId
 	 * @param array<int,Person> $persons
+	 * @param bool              $incremental Whether a valid sync token was used.
 	 * @return array{added:int,updated:int,deleted:int,skipped:int}
 	 */
-	protected function reconcile($accountId, $groupId, array $persons) {
-		$added = 0;
+	protected function reconcile($accountId, $groupId, array $persons, $incremental) {
+		$added   = 0;
 		$updated = 0;
+		$deleted = 0;
 		$skipped = 0;
+		$seen    = array();
 
 		foreach ($persons as $person) {
 			$resourceName = trim((string) $person->getResourceName());
@@ -284,9 +368,19 @@ class PeopleSync {
 				$skipped++;
 				continue;
 			}
+			$seen[$resourceName] = true;
+
 			$meta = $person->getMetadata();
 			if ($meta && $meta->getDeleted()) {
-				$skipped++; // tombstone; deletion handling is M4.
+				// Incremental tombstone → mirror the deletion locally.
+				$mapping = $this->getMapping($accountId, $resourceName);
+				if ($mapping) {
+					$this->contactmanager->deleteEntryByID((int) $mapping['entryid']);
+					$this->deleteMapping((int) $mapping['id']);
+					$deleted++;
+				} else {
+					$skipped++; // never imported (or already removed).
+				}
 				continue;
 			}
 
@@ -320,7 +414,41 @@ class PeopleSync {
 			}
 		}
 
-		return array('added' => $added, 'updated' => $updated, 'deleted' => 0, 'skipped' => $skipped);
+		// Full-sync deletion reconciliation: contacts we previously imported but
+		// that Google did not return this run have been deleted upstream.
+		if (!$incremental) {
+			$deleted += $this->reconcileFullSyncDeletions($accountId, $seen);
+		}
+
+		return array('added' => $added, 'updated' => $updated, 'deleted' => $deleted, 'skipped' => $skipped);
+	}
+
+	/**
+	 * Delete locally any contacts this account previously imported whose resource
+	 * name was absent from a full sync (i.e. removed in Google). Scoped to rows
+	 * this account created, so manually added contacts in a shared group are
+	 * never touched.
+	 *
+	 * @param int                    $accountId
+	 * @param array<string,bool>     $seen Resource names returned this run.
+	 * @return int Number of contacts deleted.
+	 */
+	private function reconcileFullSyncDeletions($accountId, array $seen) {
+		$deleted = 0;
+		$sth = $this->db->prepare(
+			'SELECT id, entryid, resource_name FROM googlecontactsync_contacts WHERE account_id = ?'
+		);
+		$sth->execute(array((int) $accountId));
+		$rows = $sth->fetchAll(\PDO::FETCH_ASSOC);
+		foreach ($rows as $row) {
+			if (isset($seen[(string) $row['resource_name']])) {
+				continue;
+			}
+			$this->contactmanager->deleteEntryByID((int) $row['entryid']);
+			$this->deleteMapping((int) $row['id']);
+			$deleted++;
+		}
+		return $deleted;
 	}
 
 	/**
@@ -446,6 +574,11 @@ class PeopleSync {
 		$sth->execute(array((string) $etag, time(), (int) $id));
 	}
 
+	private function deleteMapping($id) {
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE id = ?');
+		$sth->execute(array((int) $id));
+	}
+
 	// ///////////////////////////////// //
 	// Account persistence (own DB, PDO)  //
 	// ///////////////////////////////// //
@@ -480,6 +613,22 @@ class PeopleSync {
 			'UPDATE googlecontactsync_accounts SET target_groupid = ?, target_group_type = ?, updated = ? WHERE uid = ?'
 		);
 		$sth->execute(array((int) $groupId, (string) $type, time(), (int) $uid));
+	}
+
+	/**
+	 * Persist the People API `nextSyncToken` so the next run can be incremental.
+	 * Only stored when non-empty so a successful run never clears a usable token.
+	 *
+	 * @param int    $accountId
+	 * @param string $token
+	 */
+	private function persistSyncToken($accountId, $token) {
+		$token = (string) $token;
+		if ($token === '') {
+			return;
+		}
+		$sth = $this->db->prepare('UPDATE googlecontactsync_accounts SET sync_token = ?, updated = ? WHERE id = ?');
+		$sth->execute(array($token, time(), (int) $accountId));
 	}
 
 	private function markRunning($accountId) {
