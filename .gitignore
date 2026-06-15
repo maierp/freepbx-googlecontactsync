@@ -21,3 +21,4 @@ Thumbs.db
 # PHPUnit
 .phpunit.cache/
 .phpunit.result.cache
+phpunit.phar

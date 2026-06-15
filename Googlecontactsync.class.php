@@ -31,6 +31,7 @@ use FreePBX_Helpers;
 use FreePBX\modules\Googlecontactsync\Lib\TokenStore;
 use FreePBX\modules\Googlecontactsync\Lib\GoogleClientFactory;
 use FreePBX\modules\Googlecontactsync\Lib\PeopleSync;
+use FreePBX\modules\Googlecontactsync\Lib\Schedule;
 
 class Googlecontactsync extends FreePBX_Helpers implements BMO {
 
@@ -74,11 +75,52 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	// ///////////////////////////////// //
 
 	public function install() {
-		// M5 will register the recurring cron entry and seed default settings.
+		$this->seedDefaultSettings();
+		$this->addCronEntry();
 	}
 
 	public function uninstall() {
-		// M5/M8 will remove the cron entry and (optionally) imported data.
+		$this->removeCronEntry();
+	}
+
+	/**
+	 * Register the single recurring cron entry that drives scheduled syncs
+	 * (every 15 minutes; spec §10.1). Any previous googlecontactsync entry is
+	 * removed first so re-installs do not stack duplicate lines.
+	 */
+	private function addCronEntry() {
+		$webuser = (string) $this->freepbx->Config->get('AMPASTERISKWEBUSER');
+		$sbin    = rtrim((string) $this->freepbx->Config->get('AMPSBIN'), '/');
+		$fwc     = $sbin.'/fwconsole';
+		$cron    = $this->freepbx->Cron($webuser);
+		$this->removeCronEntry();
+		// A short random delay spreads load when many PBXes share a schedule;
+		// the literal % must be escaped for crontab.
+		$cron->addLine('*/15 * * * * [ -e '.$fwc.' ] && sleep $((RANDOM\%30)) && '.$fwc.' googlecontactsync --runsync -q');
+	}
+
+	/**
+	 * Remove any googlecontactsync scheduled-sync cron lines for the web user.
+	 */
+	private function removeCronEntry() {
+		$webuser = (string) $this->freepbx->Config->get('AMPASTERISKWEBUSER');
+		$cron    = $this->freepbx->Cron($webuser);
+		foreach ($cron->getAll() as $line) {
+			if (preg_match('/fwconsole\s+googlecontactsync\s+--runsync/', (string) $line)) {
+				$cron->remove($line);
+			}
+		}
+	}
+
+	/**
+	 * Persist the global default schedule on first install so the admin UI and
+	 * due-logic share an explicit, stored baseline (no-op if already set).
+	 */
+	private function seedDefaultSettings() {
+		if ((string) $this->getConfig(self::KEY_FREQUENCY) === '') {
+			$default = $this->getGlobalFrequency();
+			$this->setGlobalFrequency($default['frequency'], $default['time'], $default['dow']);
+		}
 	}
 
 	// ///////////////////////////////// //
@@ -382,8 +424,61 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 		return $row !== false ? $row : null;
 	}
 
+	/**
+	 * Fetch all stored account rows (raw columns; token columns remain
+	 * encrypted), ordered by uid. Used by the admin Users tab and the console
+	 * `--list` command.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
 	public function getAllAccounts() {
-		// Implemented in M7 (admin Users tab).
+		$sth = $this->db->prepare('SELECT * FROM googlecontactsync_accounts ORDER BY uid');
+		$sth->execute();
+		$rows = $sth->fetchAll(\PDO::FETCH_ASSOC);
+		return $rows !== false ? $rows : array();
+	}
+
+	/**
+	 * Fetch all enabled account rows (sync candidates), ordered by uid.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function getEnabledAccounts() {
+		$sth = $this->db->prepare('SELECT * FROM googlecontactsync_accounts WHERE enabled = 1 ORDER BY uid');
+		$sth->execute();
+		$rows = $sth->fetchAll(\PDO::FETCH_ASSOC);
+		return $rows !== false ? $rows : array();
+	}
+
+	/**
+	 * Resolve the schedule that actually governs an account: the per-user
+	 * override when one is set to a valid frequency, otherwise the admin global
+	 * default. Missing/invalid override sub-fields fall back to the global value.
+	 *
+	 * @param array<string,mixed> $account
+	 * @return array{frequency:string,time:string,dow:int}
+	 */
+	public function getEffectiveFrequency($account) {
+		$global = $this->getGlobalFrequency();
+		$freq   = isset($account['frequency']) ? (string) $account['frequency'] : '';
+		if (!in_array($freq, self::FREQUENCIES, true)) {
+			return $global;
+		}
+
+		$time = $global['time'];
+		if (isset($account['freq_time']) && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) $account['freq_time'])) {
+			$time = (string) $account['freq_time'];
+		}
+
+		$dow = $global['dow'];
+		if (isset($account['freq_dow']) && $account['freq_dow'] !== '' && $account['freq_dow'] !== null) {
+			$candidate = (int) $account['freq_dow'];
+			if ($candidate >= 0 && $candidate <= 6) {
+				$dow = $candidate;
+			}
+		}
+
+		return array('frequency' => $freq, 'time' => $time, 'dow' => $dow);
 	}
 
 	/**
@@ -724,8 +819,42 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 		return $this->getPeopleSync()->syncAccount($account);
 	}
 
+	/**
+	 * Run every enabled account that is currently due, based on its effective
+	 * schedule and last-sync time (spec §10.1). One failing account never blocks
+	 * the others. Invoked by the recurring cron entry via the console command.
+	 *
+	 * @return array<int,array<string,mixed>> Per-account result summaries.
+	 */
 	public function runDueSyncs() {
-		// Implemented in M5 (scheduling).
+		$now     = time();
+		$results = array();
+		foreach ($this->getEnabledAccounts() as $account) {
+			$eff      = $this->getEffectiveFrequency($account);
+			$lastSync = isset($account['last_sync']) ? (int) $account['last_sync'] : 0;
+			if (!Schedule::isDue($eff, $lastSync, $now)) {
+				continue;
+			}
+			$results[] = $this->runAccountSync($account);
+		}
+		return $results;
+	}
+
+	/**
+	 * Sync a single account row, catching failures so a batch can continue.
+	 *
+	 * @param array<string,mixed> $account
+	 * @return array<string,mixed> Result summary including `uid` and `status`.
+	 */
+	private function runAccountSync($account) {
+		$uid = (int) $account['uid'];
+		try {
+			$res = $this->getPeopleSync()->syncAccount($account);
+		} catch (\Throwable $e) {
+			$res = array('status' => false, 'message' => $e->getMessage());
+		}
+		$res['uid'] = $uid;
+		return $res;
 	}
 
 	/**

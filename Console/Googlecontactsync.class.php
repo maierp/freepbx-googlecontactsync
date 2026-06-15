@@ -22,11 +22,13 @@
 
 namespace FreePBX\Console\Command;
 
+use FreePBX;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Command\HelpCommand;
+use Symfony\Component\Console\Helper\Table;
 
 class Googlecontactsync extends Command {
 
@@ -42,8 +44,184 @@ class Googlecontactsync extends Command {
 	}
 
 	protected function execute(InputInterface $input, OutputInterface $output) {
-		// Sync/scheduling logic is implemented in M5. Placeholder for now.
-		return $this->outputHelp($input, $output);
+		$gcs = FreePBX::create()->Googlecontactsync;
+
+		if ($input->getOption('list')) {
+			$this->renderList($gcs, $output);
+			return 0;
+		}
+
+		if ($input->getOption('uid') !== null) {
+			return $this->syncOne($gcs, (int) $input->getOption('uid'), $output);
+		}
+
+		if ($input->getOption('all')) {
+			return $this->syncAll($gcs, $output);
+		}
+
+		if ($input->getOption('runsync')) {
+			return $this->runDue($gcs, $output);
+		}
+
+		$this->outputHelp($input, $output);
+		return 4;
+	}
+
+	/**
+	 * Print the account status table (`--list`).
+	 */
+	private function renderList($gcs, OutputInterface $output) {
+		$accounts = $gcs->getAllAccounts();
+		if (empty($accounts)) {
+			$output->writeln(_('No connected Google accounts.'));
+			return;
+		}
+
+		$table = new Table($output);
+		$table->setHeaders(array(
+			_('UID'), _('Google Email'), _('Target Group'),
+			_('Frequency'), _('Last Sync'), _('Status'),
+		));
+		foreach ($accounts as $account) {
+			$eff = $gcs->getEffectiveFrequency($account);
+			$table->addRow(array(
+				(int) $account['uid'],
+				(string) ($account['google_email'] ?? ''),
+				$this->formatGroup($account),
+				$this->formatFrequency($eff) . (empty($account['enabled']) ? ' '._('(disabled)') : ''),
+				$this->formatTime($account['last_sync'] ?? null),
+				(string) ($account['last_status'] ?? ''),
+			));
+		}
+		$table->render();
+	}
+
+	/**
+	 * Force-sync a single user (`--uid=<id>`). Non-zero exit on failure.
+	 */
+	private function syncOne($gcs, $uid, OutputInterface $output) {
+		if ($uid <= 0) {
+			$output->writeln('<error>'._('A valid --uid is required.').'</error>');
+			return 1;
+		}
+		try {
+			$res = $gcs->syncUid($uid);
+		} catch (\Throwable $e) {
+			$output->writeln('<error>'.sprintf(_('uid %d: %s'), $uid, $e->getMessage()).'</error>');
+			return 1;
+		}
+		$this->writeResult($output, $uid, $res);
+		return empty($res['status']) ? 1 : 0;
+	}
+
+	/**
+	 * Force-sync every enabled account regardless of schedule (`--all`).
+	 */
+	private function syncAll($gcs, OutputInterface $output) {
+		$accounts = $gcs->getEnabledAccounts();
+		if (empty($accounts)) {
+			$output->writeln(_('No enabled Google accounts to sync.'));
+			return 0;
+		}
+		$failures = 0;
+		foreach ($accounts as $account) {
+			$uid = (int) $account['uid'];
+			try {
+				$res = $gcs->syncUid($uid);
+			} catch (\Throwable $e) {
+				$res = array('status' => false, 'message' => $e->getMessage());
+			}
+			$this->writeResult($output, $uid, $res);
+			if (empty($res['status'])) {
+				$failures++;
+			}
+		}
+		return $failures > 0 ? 1 : 0;
+	}
+
+	/**
+	 * Run only the accounts that are currently due (`--runsync`, used by cron).
+	 */
+	private function runDue($gcs, OutputInterface $output) {
+		$results = $gcs->runDueSyncs();
+		if (empty($results)) {
+			$output->writeln(_('No accounts are due to sync.'));
+			return 0;
+		}
+		$failures = 0;
+		foreach ($results as $res) {
+			$this->writeResult($output, (int) ($res['uid'] ?? 0), $res);
+			if (empty($res['status'])) {
+				$failures++;
+			}
+		}
+		return $failures > 0 ? 1 : 0;
+	}
+
+	/**
+	 * Print a one-line per-account result summary.
+	 *
+	 * @param array<string,mixed> $res
+	 */
+	private function writeResult(OutputInterface $output, $uid, array $res) {
+		if (!empty($res['status'])) {
+			$output->writeln(sprintf(
+				_('uid %d: OK — added %d, updated %d, deleted %d.'),
+				(int) $uid,
+				(int) ($res['added'] ?? 0),
+				(int) ($res['updated'] ?? 0),
+				(int) ($res['deleted'] ?? 0)
+			));
+		} else {
+			$output->writeln('<error>'.sprintf(
+				_('uid %d: ERROR — %s'),
+				(int) $uid,
+				(string) ($res['message'] ?? _('unknown error'))
+			).'</error>');
+		}
+	}
+
+	/**
+	 * Human-readable effective schedule, e.g. "hourly", "daily 03:00",
+	 * "weekly Mon 03:00".
+	 *
+	 * @param array{frequency:string,time:string,dow:int} $eff
+	 * @return string
+	 */
+	private function formatFrequency(array $eff) {
+		switch ($eff['frequency']) {
+			case 'hourly':
+				return 'hourly';
+			case 'weekly':
+				$days = array('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
+				$dow  = isset($days[(int) $eff['dow']]) ? $days[(int) $eff['dow']] : (string) $eff['dow'];
+				return 'weekly '.$dow.' '.$eff['time'];
+			case 'daily':
+			default:
+				return 'daily '.$eff['time'];
+		}
+	}
+
+	/**
+	 * @param array<string,mixed> $account
+	 * @return string
+	 */
+	private function formatGroup($account) {
+		$id   = isset($account['target_groupid']) ? (int) $account['target_groupid'] : 0;
+		$type = (string) ($account['target_group_type'] ?? '');
+		if ($id <= 0) {
+			return _('(not set)');
+		}
+		return ($type !== '' ? $type.' ' : '').'#'.$id;
+	}
+
+	/**
+	 * @param int|null $ts
+	 * @return string
+	 */
+	private function formatTime($ts) {
+		$ts = (int) $ts;
+		return $ts > 0 ? date('Y-m-d H:i', $ts) : _('never');
 	}
 
 	protected function outputHelp(InputInterface $input, OutputInterface $output) {
