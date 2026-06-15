@@ -22,6 +22,7 @@
 
 $freq = $frequency['frequency'];
 ?>
+<form name="gcssettings" class="fpbx-submit" method="post" action="config.php?display=googlecontactsync" autocomplete="off">
 <input type="hidden" name="action" value="savesettings">
 
 <div class="element-container">
@@ -133,6 +134,7 @@ $freq = $frequency['frequency'];
 		</div>
 	</div>
 </div>
+</form>
 
 <script type="text/javascript">
 	(function() {
