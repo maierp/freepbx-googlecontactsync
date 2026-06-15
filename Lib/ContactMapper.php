@@ -46,11 +46,11 @@ class ContactMapper {
 	public function map(Person $person) {
 		$names      = $person->getNames();
 		$name       = (is_array($names) && !empty($names)) ? $names[0] : null;
-		$given      = $name ? trim((string) $name->getGivenName()) : '';
-		$family     = $name ? trim((string) $name->getFamilyName()) : '';
-		$prefix     = $name ? trim((string) $name->getHonorificPrefix()) : '';
-		$suffix     = $name ? trim((string) $name->getHonorificSuffix()) : '';
-		$rawDisplay = $name ? trim((string) $name->getDisplayName()) : '';
+		$given      = $this->stripUnsupported($name ? trim((string) $name->getGivenName()) : '');
+		$family     = $this->stripUnsupported($name ? trim((string) $name->getFamilyName()) : '');
+		$prefix     = $this->stripUnsupported($name ? trim((string) $name->getHonorificPrefix()) : '');
+		$suffix     = $this->stripUnsupported($name ? trim((string) $name->getHonorificSuffix()) : '');
+		$rawDisplay = $this->stripUnsupported($name ? trim((string) $name->getDisplayName()) : '');
 
 		$numbers = $this->mapNumbers($person);
 		$emails  = $this->mapEmails($person);
@@ -66,13 +66,37 @@ class ContactMapper {
 			'fname'       => $given,
 			'lname'       => $family,
 			'title'       => trim($prefix.' '.$suffix),
-			'company'     => $this->buildCompany($person),
-			'address'     => $this->mapAddress($person),
+			'company'     => $this->stripUnsupported($this->buildCompany($person)),
+			'address'     => $this->stripUnsupported($this->mapAddress($person)),
 			'numbers'     => $numbers,
 			'emails'      => $emails,
 			'websites'    => $this->mapWebsites($person),
 			'gravatar'    => false,
 		);
+	}
+
+	/**
+	 * Remove 4-byte UTF-8 characters (emoji, regional-indicator flags, etc.).
+	 *
+	 * Contact Manager's text columns use MySQL's 3-byte `utf8` charset, so a
+	 * 4-byte code point makes the underlying INSERT fail and aborts the whole
+	 * sync. Stripping these characters keeps the affected contact importable
+	 * (without the emoji) instead of blocking every other contact too.
+	 *
+	 * @param string $text
+	 * @return string
+	 */
+	private function stripUnsupported($text) {
+		$text = (string) $text;
+		if ($text === '') {
+			return '';
+		}
+		$clean = preg_replace('/[\x{10000}-\x{10FFFF}]/u', '', $text);
+		// preg_replace returns null on malformed UTF-8; fall back to a byte-safe filter.
+		if ($clean === null) {
+			$clean = (string) preg_replace('/[\x{10000}-\x{10FFFF}]/u', '', (string) mb_convert_encoding($text, 'UTF-8', 'UTF-8'));
+		}
+		return trim($clean);
 	}
 
 	/**

@@ -120,8 +120,20 @@ class PeopleSync {
 
 		try {
 			$service   = $this->getPeopleService($account);
+			$originalGroupId = isset($account['target_groupid']) ? (int) $account['target_groupid'] : 0;
 			$groupId   = $this->resolveTargetGroup($account);
 			$syncToken = isset($account['sync_token']) ? (string) $account['sync_token'] : '';
+
+			// The configured target group was deleted/replaced, so a new one was
+			// just created. Its contacts (and the entries the old mappings point
+			// to) are gone, so force a full resync and drop the stale mappings —
+			// otherwise an incremental run imports nothing and unchanged etags
+			// would skip re-adding every contact into the new group.
+			if ($originalGroupId > 0 && $groupId !== $originalGroupId) {
+				$this->clearMappings($accountId);
+				$syncToken = '';
+			}
+
 			$fetch     = $this->fetchConnections($service, $syncToken);
 			$counts    = $this->reconcile($accountId, $groupId, $fetch['persons'], $fetch['incremental']);
 			$this->regenerateContactFiles($groupId);
@@ -577,6 +589,17 @@ class PeopleSync {
 	private function deleteMapping($id) {
 		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE id = ?');
 		$sth->execute(array((int) $id));
+	}
+
+	/**
+	 * Remove all contact mappings for an account. Used when the target group was
+	 * recreated so the next full resync re-imports every contact afresh.
+	 *
+	 * @param int $accountId
+	 */
+	private function clearMappings($accountId) {
+		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE account_id = ?');
+		$sth->execute(array((int) $accountId));
 	}
 
 	// ///////////////////////////////// //

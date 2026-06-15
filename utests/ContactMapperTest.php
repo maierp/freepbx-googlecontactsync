@@ -152,8 +152,28 @@ class ContactMapperTest extends TestCase {
 		$this->assertSame('Prof. Jr.', $entry['title']);
 	}
 
-	public function testEmptyValuesAreFilteredOut(): void {
+	public function testStripsFourByteCharactersUnsupportedByContactManager(): void {
 		$entry = $this->mapper->map($this->person(array(
+			'names'         => array(array(
+				'displayName' => 'Jane 🙇 Doe 🇦',
+				'givenName'   => 'Jane 😀',
+				'familyName'  => 'Doe 🚀',
+			)),
+			'organizations' => array(array('name' => 'Acme 🎉')),
+			'addresses'     => array(array('formattedValue' => '1 Main St 🏠')),
+		)));
+		$this->assertSame('Jane  Doe', $entry['displayname']);
+		$this->assertSame('Jane', $entry['fname']);
+		$this->assertSame('Doe', $entry['lname']);
+		$this->assertSame('Acme', $entry['company']);
+		$this->assertSame('1 Main St', $entry['address']);
+		// No 4-byte sequence must survive in any text field.
+		foreach (array('displayname', 'fname', 'lname', 'company', 'address') as $field) {
+			$this->assertSame(0, preg_match('/[\x{10000}-\x{10FFFF}]/u', $entry[$field]), $field.' still has a 4-byte char');
+		}
+	}
+
+	public function testEmptyValuesAreFilteredOut(): void {		$entry = $this->mapper->map($this->person(array(
 			'names'          => array(array('displayName' => 'Jane')),
 			'phoneNumbers'   => array(array('value' => '', 'type' => 'work'), array('value' => '+15551112222', 'type' => 'work')),
 			'emailAddresses' => array(array('value' => ''), array('value' => 'jane@x.com')),

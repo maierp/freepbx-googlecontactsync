@@ -94,6 +94,112 @@ class Googlecontactsync extends Modules {
 	}
 
 	/**
+	 * Whitelist the AJAX commands this UCP module accepts (called by the UCP
+	 * Ajax dispatcher before {@see ajaxHandler()}).
+	 *
+	 * @param string $command
+	 * @param array  $settings
+	 * @return bool
+	 */
+	public function ajaxRequest($command, $settings) {
+		switch ($command) {
+			case 'savesettings':
+			case 'syncnow':
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Handle a UCP AJAX request. Returns a {status, message} array rendered as
+	 * JSON. The uid is always taken from the authenticated session (no IDOR) and
+	 * each action is additionally bound to a per-user CSRF token.
+	 *
+	 * @return array{status:bool,message:string}
+	 */
+	public function ajaxHandler() {
+		if ($this->userId === false) {
+			return array('status' => false, 'message' => _('You are not signed in.'));
+		}
+		$gcs     = $this->UCP->FreePBX->Googlecontactsync;
+		$command = isset($_REQUEST['command']) ? (string) $_REQUEST['command'] : '';
+		$token   = isset($_POST['token']) ? (string) $_POST['token'] : '';
+
+		switch ($command) {
+			case 'savesettings':
+				if (!$gcs->verifyActionToken($this->userId, 'savesettings', $token)) {
+					return array('status' => false, 'message' => _('Security token mismatch. Please reload the page and try again.'));
+				}
+				$group = isset($_POST['target_group']) ? (string) $_POST['target_group'] : '';
+				if ($group === '__new__') {
+					$gcs->createAndSetTargetGroup($this->userId);
+				} elseif ($group !== '') {
+					$gcs->setAccountTarget($this->userId, (int) $group, '');
+				}
+				$freq = isset($_POST['frequency']) ? (string) $_POST['frequency'] : 'default';
+				$time = isset($_POST['freq_time']) ? (string) $_POST['freq_time'] : null;
+				$dow  = isset($_POST['freq_dow']) ? (string) $_POST['freq_dow'] : null;
+				$gcs->setAccountFrequency($this->userId, $freq, $time, $dow);
+				return array('status' => true, 'message' => _('Your settings have been saved.'));
+
+			case 'syncnow':
+				if (!$gcs->verifyActionToken($this->userId, 'syncnow', $token)) {
+					return array('status' => false, 'message' => _('Security token mismatch. Please reload the page and try again.'));
+				}
+				try {
+					$gcs->syncUid($this->userId);
+					$st = $gcs->getConnectionStatus($this->userId);
+					return array(
+						'status'    => true,
+						'message'   => _('Sync completed.'),
+						'lastSync'  => $this->formatLastSync($st),
+						'lastError' => $this->extractLastError($st),
+					);
+				} catch (\Exception $e) {
+					$st = $gcs->getConnectionStatus($this->userId);
+					return array(
+						'status'    => false,
+						'message'   => _('The sync did not complete. Please try again later.'),
+						'lastSync'  => $this->formatLastSync($st),
+						'lastError' => $this->extractLastError($st),
+					);
+				}
+		}
+		return array('status' => false, 'message' => _('Unknown request.'));
+	}
+
+	/**
+	 * The last recorded sync error for the widget, or '' when the last run was
+	 * successful. Used to refresh the error box after an AJAX "Sync now".
+	 *
+	 * @param array<string,mixed> $status
+	 * @return string
+	 */
+	private function extractLastError($status) {
+		if (($status['last_status'] ?? '') === 'error' && !empty($status['last_message'])) {
+			return (string) $status['last_message'];
+		}
+		return '';
+	}
+
+	/**
+	 * Render the "Last sync" line shown in the widget from a connection-status
+	 * array, so the AJAX "Sync now" response can refresh it in place.
+	 *
+	 * @param array<string,mixed> $status
+	 * @return string Escaped, display-ready text.
+	 */
+	private function formatLastSync($status) {
+		if (empty($status['last_sync'])) {
+			return _('No sync has run yet.');
+		}
+		return _('Last sync:').' '
+			.date('Y-m-d H:i', (int) $status['last_sync'])
+			.' ('.(string) $status['last_status'].')';
+	}
+
+	/**
 	 * Redirect back to a clean UCP URL (drops the OAuth query parameters so a
 	 * reload cannot replay the code/state).
 	 *
@@ -148,6 +254,12 @@ class Googlecontactsync extends Modules {
 			'authUrl'         => $authUrl,
 			'authError'       => $authError,
 			'disconnectToken' => $status['connected'] ? $gcs->getDisconnectToken($this->userId) : '',
+			'saveToken'       => $status['connected'] ? $gcs->getActionToken($this->userId, 'savesettings') : '',
+			'syncToken'       => $status['connected'] ? $gcs->getActionToken($this->userId, 'syncnow') : '',
+			'groups'          => $status['connected'] ? $gcs->getAvailableGroups($this->userId) : array(),
+			'globalFrequency' => $gcs->getGlobalFrequency(),
+			'frequencies'     => \FreePBX\modules\Googlecontactsync::FREQUENCIES,
+			'daysOfWeek'      => $gcs->getDaysOfWeek(),
 			'message'         => isset($_REQUEST['googlecontactsyncmsg']) ? (string) $_REQUEST['googlecontactsyncmsg'] : '',
 		);
 

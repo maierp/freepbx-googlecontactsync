@@ -209,7 +209,7 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	 *
 	 * @return array<int,string>
 	 */
-	private function getDaysOfWeek() {
+	public function getDaysOfWeek() {
 		return array(
 			0 => _('Sunday'),
 			1 => _('Monday'),
@@ -531,12 +531,136 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 		return true;
 	}
 
-	public function setAccountTarget($uid, $groupid, $type) {
-		// Implemented in M6 (UCP group selector).
+	/**
+	 * Contact Manager groups a user may import into: their own private groups
+	 * plus any external groups they are permitted to use. Internal groups (auto
+	 * from extensions) are never valid import targets and are excluded.
+	 *
+	 * This set is the authoritative allow-list used to validate a user's group
+	 * selection server-side (IDOR protection).
+	 *
+	 * @param int $uid userman user id.
+	 * @return array<int,array{id:int,name:string,type:string,owner:int}>
+	 */
+	public function getAvailableGroups($uid) {
+		$uid    = (int) $uid;
+		$groups = $this->freepbx->Contactmanager->getGroupsbyOwner($uid);
+		$out    = array();
+		foreach ((array) $groups as $g) {
+			$type = isset($g['type']) ? (string) $g['type'] : '';
+			if ($type !== 'private' && $type !== 'external') {
+				continue;
+			}
+			$out[] = array(
+				'id'    => (int) $g['id'],
+				'name'  => (string) $g['name'],
+				'type'  => $type,
+				'owner' => isset($g['owner']) ? (int) $g['owner'] : -1,
+			);
+		}
+		return $out;
 	}
 
+	/**
+	 * Persist the Contact Manager group a user's contacts import into. The group
+	 * id is validated against {@see getAvailableGroups()} so a user can only
+	 * target a private group they own or an external group they may access; its
+	 * real type is taken from Contact Manager (never trusted from the client).
+	 *
+	 * @param int    $uid
+	 * @param int    $groupid
+	 * @param string $type Ignored; the authoritative type is resolved server-side.
+	 * @return bool True when stored; false when the user/group is invalid.
+	 */
+	public function setAccountTarget($uid, $groupid, $type = '') {
+		$uid = (int) $uid;
+		if (!$this->getAccountByUid($uid)) {
+			return false;
+		}
+		$groupid = (int) $groupid;
+		$group   = null;
+		foreach ($this->getAvailableGroups($uid) as $g) {
+			if ($g['id'] === $groupid) {
+				$group = $g;
+				break;
+			}
+		}
+		if ($group === null) {
+			return false;
+		}
+		$sth = $this->db->prepare(
+			'UPDATE googlecontactsync_accounts SET target_groupid = ?, target_group_type = ?, updated = ? WHERE uid = ?'
+		);
+		$sth->execute(array($groupid, $group['type'], time(), $uid));
+		return true;
+	}
+
+	/**
+	 * Create a fresh private "Google Contacts" group owned by the user and set it
+	 * as their import target. Used by the UCP "Create new private group" option.
+	 *
+	 * @param int $uid
+	 * @return bool True when created and stored; false otherwise.
+	 */
+	public function createAndSetTargetGroup($uid) {
+		$uid = (int) $uid;
+		if (!$this->getAccountByUid($uid)) {
+			return false;
+		}
+		$res = $this->freepbx->Contactmanager->addGroup(_('Google Contacts'), 'private', $uid, false);
+		if (empty($res['status']) || empty($res['id'])) {
+			return false;
+		}
+		$sth = $this->db->prepare(
+			'UPDATE googlecontactsync_accounts SET target_groupid = ?, target_group_type = ?, updated = ? WHERE uid = ?'
+		);
+		$sth->execute(array((int) $res['id'], 'private', time(), $uid));
+		return true;
+	}
+
+	/**
+	 * Persist a user's per-account schedule override. A frequency that is not one
+	 * of self::FREQUENCIES (e.g. the UCP "Use system default" choice) clears the
+	 * override so the account follows the admin global default again.
+	 *
+	 * @param int         $uid
+	 * @param string      $freq One of self::FREQUENCIES, or any other value to clear.
+	 * @param string|null $time HH:MM (used for daily/weekly).
+	 * @param int|null    $dow  0-6, Sunday..Saturday (used for weekly).
+	 * @return bool True when stored/cleared; false when the user has no account.
+	 */
 	public function setAccountFrequency($uid, $freq, $time = null, $dow = null) {
-		// Implemented in M6 (UCP frequency override).
+		$uid = (int) $uid;
+		if (!$this->getAccountByUid($uid)) {
+			return false;
+		}
+		$freq = (string) $freq;
+		if (!in_array($freq, self::FREQUENCIES, true)) {
+			$sth = $this->db->prepare(
+				'UPDATE googlecontactsync_accounts'
+				.' SET frequency = NULL, freq_time = NULL, freq_dow = NULL, updated = ? WHERE uid = ?'
+			);
+			$sth->execute(array(time(), $uid));
+			return true;
+		}
+
+		$timeVal = null;
+		if ($time !== null && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) $time)) {
+			$timeVal = (string) $time;
+		}
+		$dowVal = null;
+		if ($dow !== null && $dow !== '') {
+			$d = (int) $dow;
+			if ($d >= 0 && $d <= 6) {
+				$dowVal = $d;
+			}
+		}
+		$sth = $this->db->prepare(
+			'UPDATE googlecontactsync_accounts'
+			.' SET frequency = ?, freq_time = ?, freq_dow = ?, updated = ? WHERE uid = ?'
+		);
+		$sth->execute(array($freq, $timeVal, $dowVal, time(), $uid));
+		return true;
 	}
 
 	/**
@@ -594,6 +718,11 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 			'last_status'           => $account['last_status'] ?? '',
 			'last_message'          => $account['last_message'] ?? '',
 			'enabled'               => isset($account['enabled']) ? (bool) $account['enabled'] : false,
+			'target_groupid'        => isset($account['target_groupid']) ? (int) $account['target_groupid'] : 0,
+			'target_group_type'     => $account['target_group_type'] ?? '',
+			'frequency'             => $account['frequency'] ?? '',
+			'freq_time'             => $account['freq_time'] ?? '',
+			'freq_dow'              => isset($account['freq_dow']) && $account['freq_dow'] !== null ? (int) $account['freq_dow'] : null,
 			'credentialsConfigured' => ($this->getClientId() !== '' && $this->hasClientSecret()),
 		);
 	}
@@ -772,14 +901,36 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	}
 
 	/**
-	 * CSRF token for the UCP "Disconnect" action, bound to the user and the
-	 * per-install signing key.
+	 * CSRF token for a per-user UCP action (e.g. disconnect, savesettings,
+	 * syncnow), bound to the user, the action name, and the per-install signing
+	 * key. Lets the no-JS server-rendered widget protect its links/forms.
+	 *
+	 * @param int    $uid
+	 * @param string $action
+	 * @return string
+	 */
+	public function getActionToken($uid, $action) {
+		return hash_hmac('sha256', (string) $action.'|'.(int) $uid, $this->getStateKey());
+	}
+
+	/**
+	 * @param int    $uid
+	 * @param string $action
+	 * @param string $token
+	 * @return bool
+	 */
+	public function verifyActionToken($uid, $action, $token) {
+		return hash_equals($this->getActionToken($uid, $action), (string) $token);
+	}
+
+	/**
+	 * CSRF token for the UCP "Disconnect" action.
 	 *
 	 * @param int $uid
 	 * @return string
 	 */
 	public function getDisconnectToken($uid) {
-		return hash_hmac('sha256', 'disconnect|'.(int) $uid, $this->getStateKey());
+		return $this->getActionToken($uid, 'disconnect');
 	}
 
 	/**
@@ -788,7 +939,7 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	 * @return bool
 	 */
 	public function verifyDisconnectToken($uid, $token) {
-		return hash_equals($this->getDisconnectToken($uid), (string) $token);
+		return $this->verifyActionToken($uid, 'disconnect', (string) $token);
 	}
 
 	private function base64UrlEncode($data) {

@@ -114,6 +114,16 @@ class PeopleSyncTest extends TestCase {
 		return (int) $this->db->lastInsertId();
 	}
 
+	/** Insert an account whose target group id points at a (since-deleted) group. */
+	private function seedAccountWithTargetGroup(string $syncToken, int $targetGroupId): int {
+		$sth = $this->db->prepare(
+			'INSERT INTO googlecontactsync_accounts (uid, sync_token, target_groupid, target_group_type)'
+			.' VALUES (?, ?, ?, ?)'
+		);
+		$sth->execute(array(self::GROUP['owner'], $syncToken, $targetGroupId, 'private'));
+		return (int) $this->db->lastInsertId();
+	}
+
 	/** Insert a contact mapping row. */
 	private function seedMapping(int $accountId, string $resourceName, string $etag, int $entryid): void {
 		$sth = $this->db->prepare(
@@ -257,6 +267,34 @@ class PeopleSyncTest extends TestCase {
 		$this->assertSame('error', $this->account($accountId)['last_status']);
 		// A non-expired failure must not clobber the stored sync token.
 		$this->assertSame('TOKEN-1', $this->account($accountId)['sync_token']);
+	}
+
+	public function testDeletedTargetGroupForcesFullResyncAndReimportsContacts(): void {
+		// The user deleted the import group; its id is stored but no longer
+		// resolvable, and a stored sync token would otherwise drive an
+		// incremental (empty) run. The sync must recreate the group, drop the
+		// stale mappings, and full-resync so every contact is re-imported.
+		$accountId = $this->seedAccountWithTargetGroup('TOKEN-OLD', 999);
+		$this->seedMapping($accountId, 'people/c1', 'e1', 201);
+		$this->seedMapping($accountId, 'people/c2', 'e2', 202);
+
+		$conns = new FakePeopleConnections(array(
+			$this->response(array(
+				$this->person('people/c1', 'e1', 'Alice'),
+				$this->person('people/c2', 'e2', 'Bob'),
+			), 'TOKEN-NEW'),
+		));
+
+		$result = $this->engine($conns)->syncAccount($this->account($accountId));
+
+		$this->assertTrue($result['status']);
+		$this->assertSame(2, $result['added'], 'Every contact must be re-imported into the new group');
+		$this->assertSame(0, $result['updated']);
+		$this->assertSame(0, $result['skipped'], 'Stale mappings must not cause unchanged-etag skips');
+		$this->assertSame(2, $this->mappingCount($accountId), 'Mappings rebuilt against the new group');
+		$this->assertSame('TOKEN-NEW', $this->account($accountId)['sync_token']);
+		// The run must be a full sync (no stored sync token sent to the API).
+		$this->assertArrayNotHasKey('syncToken', $conns->calls[0]);
 	}
 }
 
