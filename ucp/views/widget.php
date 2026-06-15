@@ -146,6 +146,11 @@ $currentDow  = ($status['freq_dow'] !== null) ? (int) $status['freq_dow'] : (int
 			   data-token="<?php echo htmlspecialchars($syncToken, ENT_QUOTES); ?>">
 				<i class="fa fa-refresh"></i> <?php echo _('Sync now'); ?>
 			</button>
+			<button type="button" class="btn btn-default gcs-fullsync"
+			   data-token="<?php echo htmlspecialchars($fullSyncToken, ENT_QUOTES); ?>"
+			   data-confirm="<?php echo htmlspecialchars(_('Delete the contacts imported by this account and re-import them all from Google?'), ENT_QUOTES); ?>">
+				<i class="fa fa-cloud-download"></i> <?php echo _('Full sync'); ?>
+			</button>
 			<a class="btn btn-default"
 			   href="index.php?googlecontactsync=disconnect&amp;token=<?php echo urlencode($disconnectToken); ?>"
 			   onclick="return confirm('<?php echo htmlspecialchars(_('Disconnect this Google account?'), ENT_QUOTES); ?>');">

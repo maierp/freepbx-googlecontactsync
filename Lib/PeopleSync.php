@@ -109,10 +109,13 @@ class PeopleSync {
 	 * Run a full sync for a single account row. Failures are caught, recorded,
 	 * and returned (never thrown) so a batch run can continue with other users.
 	 *
-	 * @param array<string,mixed> $account Row from googlecontactsync_accounts.
+	 * @param array<string,mixed> $account   Row from googlecontactsync_accounts.
+	 * @param bool                $forceFull When true, perform a clean full
+	 *        import: delete every contact this account previously imported,
+	 *        discard the stored sync token, and re-import all contacts afresh.
 	 * @return array<string,mixed> Result summary including a `status` flag.
 	 */
-	public function syncAccount(array $account) {
+	public function syncAccount(array $account, $forceFull = false) {
 		$uid       = (int) $account['uid'];
 		$accountId = (int) $account['id'];
 		$started   = time();
@@ -131,6 +134,15 @@ class PeopleSync {
 			// would skip re-adding every contact into the new group.
 			if ($originalGroupId > 0 && $groupId !== $originalGroupId) {
 				$this->clearMappings($accountId);
+				$syncToken = '';
+			}
+
+			// Explicit clean full import: remove the contacts previously imported
+			// for this account and start from a blank slate so every Google
+			// contact is re-created fresh (no stale entries, no unchanged-etag
+			// skips).
+			if ($forceFull) {
+				$this->purgeImportedContacts($accountId);
 				$syncToken = '';
 			}
 
@@ -600,6 +612,22 @@ class PeopleSync {
 	private function clearMappings($accountId) {
 		$sth = $this->db->prepare('DELETE FROM googlecontactsync_contacts WHERE account_id = ?');
 		$sth->execute(array((int) $accountId));
+	}
+
+	/**
+	 * Delete every Contact Manager entry this account previously imported and
+	 * clear its mappings, leaving a blank slate for a clean full import. Scoped
+	 * to rows this account created, so contacts added by other means survive.
+	 *
+	 * @param int $accountId
+	 */
+	private function purgeImportedContacts($accountId) {
+		$sth = $this->db->prepare('SELECT entryid FROM googlecontactsync_contacts WHERE account_id = ?');
+		$sth->execute(array((int) $accountId));
+		foreach ($sth->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+			$this->contactmanager->deleteEntryByID((int) $row['entryid']);
+		}
+		$this->clearMappings($accountId);
 	}
 
 	// ///////////////////////////////// //

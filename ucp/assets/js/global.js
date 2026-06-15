@@ -62,22 +62,36 @@ var GooglecontactsyncC = UCPMC.extend({
 
 		$widget.find('.gcs-syncnow').off('click.gcs').on('click.gcs', function (e) {
 			e.preventDefault();
+			self.runSync($widget, $(this), 'syncnow');
+		});
+
+		$widget.find('.gcs-fullsync').off('click.gcs').on('click.gcs', function (e) {
+			e.preventDefault();
 			var $btn = $(this);
-			$btn.prop('disabled', true);
-			self.post({
-				module: 'googlecontactsync',
-				command: 'syncnow',
-				token: $btn.data('token')
-			}, function () {
-				$btn.prop('disabled', false);
-			}, function (resp) {
-				if (resp && typeof resp.lastSync !== 'undefined') {
-					$widget.find('.gcs-last-sync').text(resp.lastSync);
-				}
-				if (resp && typeof resp.lastError !== 'undefined') {
-					self.renderLastError($widget, resp.lastError);
-				}
-			});
+			var confirmMsg = $btn.data('confirm');
+			if (confirmMsg && !window.confirm(confirmMsg)) {
+				return;
+			}
+			self.runSync($widget, $btn, 'fullsync');
+		});
+	},
+	// Post a sync command and refresh the last-sync / last-error display.
+	runSync: function ($widget, $btn, command) {
+		var self = this;
+		$btn.prop('disabled', true);
+		self.post({
+			module: 'googlecontactsync',
+			command: command,
+			token: $btn.data('token')
+		}, function () {
+			$btn.prop('disabled', false);
+		}, function (resp) {
+			if (resp && typeof resp.lastSync !== 'undefined') {
+				$widget.find('.gcs-last-sync').text(resp.lastSync);
+			}
+			if (resp && typeof resp.lastError !== 'undefined') {
+				self.renderLastError($widget, resp.lastError);
+			}
 		});
 	},
 	// Replace the persistent "last sync error" box. Empty string clears it.

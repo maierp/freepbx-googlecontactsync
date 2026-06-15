@@ -39,6 +39,7 @@ class Googlecontactsync extends Command {
 				new InputOption('runsync', null, InputOption::VALUE_NONE, _('Run all accounts that are due (used by cron)')),
 				new InputOption('uid', null, InputOption::VALUE_REQUIRED, _('Force-sync one userman user now')),
 				new InputOption('all', null, InputOption::VALUE_NONE, _('Force-sync every enabled account regardless of schedule')),
+				new InputOption('full', null, InputOption::VALUE_NONE, _('With --uid/--all: clean full import (delete imported contacts and re-import all)')),
 				new InputOption('list', null, InputOption::VALUE_NONE, _('Print account status table')),
 			));
 	}
@@ -52,11 +53,11 @@ class Googlecontactsync extends Command {
 		}
 
 		if ($input->getOption('uid') !== null) {
-			return $this->syncOne($gcs, (int) $input->getOption('uid'), $output);
+			return $this->syncOne($gcs, (int) $input->getOption('uid'), (bool) $input->getOption('full'), $output);
 		}
 
 		if ($input->getOption('all')) {
-			return $this->syncAll($gcs, $output);
+			return $this->syncAll($gcs, (bool) $input->getOption('full'), $output);
 		}
 
 		if ($input->getOption('runsync')) {
@@ -99,13 +100,13 @@ class Googlecontactsync extends Command {
 	/**
 	 * Force-sync a single user (`--uid=<id>`). Non-zero exit on failure.
 	 */
-	private function syncOne($gcs, $uid, OutputInterface $output) {
+	private function syncOne($gcs, $uid, $full, OutputInterface $output) {
 		if ($uid <= 0) {
 			$output->writeln('<error>'._('A valid --uid is required.').'</error>');
 			return 1;
 		}
 		try {
-			$res = $gcs->syncUid($uid);
+			$res = $gcs->syncUid($uid, $full);
 		} catch (\Throwable $e) {
 			$output->writeln('<error>'.sprintf(_('uid %d: %s'), $uid, $e->getMessage()).'</error>');
 			return 1;
@@ -117,7 +118,7 @@ class Googlecontactsync extends Command {
 	/**
 	 * Force-sync every enabled account regardless of schedule (`--all`).
 	 */
-	private function syncAll($gcs, OutputInterface $output) {
+	private function syncAll($gcs, $full, OutputInterface $output) {
 		$accounts = $gcs->getEnabledAccounts();
 		if (empty($accounts)) {
 			$output->writeln(_('No enabled Google accounts to sync.'));
@@ -127,7 +128,7 @@ class Googlecontactsync extends Command {
 		foreach ($accounts as $account) {
 			$uid = (int) $account['uid'];
 			try {
-				$res = $gcs->syncUid($uid);
+				$res = $gcs->syncUid($uid, $full);
 			} catch (\Throwable $e) {
 				$res = array('status' => false, 'message' => $e->getMessage());
 			}

@@ -45,7 +45,7 @@ class GcsFakeBmo {
 	/** @var array<int,array<int,mixed>> Recorded delegated calls. */
 	public $calls = array();
 	/** @var array<string,string> Valid token per action. */
-	public $tokens = array('savesettings' => 'save-ok', 'syncnow' => 'sync-ok');
+	public $tokens = array('savesettings' => 'save-ok', 'syncnow' => 'sync-ok', 'fullsync' => 'full-ok');
 	/** @var bool When true, syncUid() throws to simulate a failed run. */
 	public $syncThrows = false;
 
@@ -71,8 +71,8 @@ class GcsFakeBmo {
 		return true;
 	}
 
-	public function syncUid($uid) {
-		$this->calls[] = array('syncUid', (int) $uid);
+	public function syncUid($uid, $full = false) {
+		$this->calls[] = array('syncUid', (int) $uid, (bool) $full);
 		if ($this->syncThrows) {
 			throw new \Exception('boom');
 		}
@@ -215,9 +215,29 @@ class UcpAjaxHandlerTest extends TestCase {
 		$res = $this->ucp->ajaxHandler();
 
 		$this->assertTrue($res['status']);
-		$this->assertSame(array(array('syncUid', self::UID)), $this->bmo->calls);
+		$this->assertSame(array(array('syncUid', self::UID, false)), $this->bmo->calls);
 		$this->assertArrayHasKey('lastSync', $res);
 		$this->assertStringContainsString('ok', $res['lastSync']);
+	}
+
+	public function testFullSyncRunsCleanImportForSessionUid(): void {
+		$_REQUEST['command'] = 'fullsync';
+		$_POST['token']      = 'full-ok';
+
+		$res = $this->ucp->ajaxHandler();
+
+		$this->assertTrue($res['status']);
+		$this->assertSame(array(array('syncUid', self::UID, true)), $this->bmo->calls);
+	}
+
+	public function testFullSyncRejectsBadToken(): void {
+		$_REQUEST['command'] = 'fullsync';
+		$_POST['token']      = 'nope';
+
+		$res = $this->ucp->ajaxHandler();
+
+		$this->assertFalse($res['status']);
+		$this->assertSame(array(), $this->bmo->calls);
 	}
 
 	public function testSyncNowReportsFailureGracefully(): void {
@@ -228,7 +248,7 @@ class UcpAjaxHandlerTest extends TestCase {
 		$res = $this->ucp->ajaxHandler();
 
 		$this->assertFalse($res['status']);
-		$this->assertSame(array(array('syncUid', self::UID)), $this->bmo->calls);
+		$this->assertSame(array(array('syncUid', self::UID, false)), $this->bmo->calls);
 	}
 }
 

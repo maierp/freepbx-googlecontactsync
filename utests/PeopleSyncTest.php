@@ -296,6 +296,34 @@ class PeopleSyncTest extends TestCase {
 		// The run must be a full sync (no stored sync token sent to the API).
 		$this->assertArrayNotHasKey('syncToken', $conns->calls[0]);
 	}
+
+	public function testForceFullSyncPurgesExistingContactsAndReimports(): void {
+		// User requests a clean full import: every previously imported entry is
+		// deleted and re-created, regardless of the stored sync token or etags.
+		$accountId = $this->seedAccount('TOKEN-OLD');
+		$this->seedMapping($accountId, 'people/c1', 'e1', 201);
+		$this->seedMapping($accountId, 'people/c2', 'e2', 202);
+
+		$conns = new FakePeopleConnections(array(
+			$this->response(array(
+				$this->person('people/c1', 'e1', 'Alice'),
+				$this->person('people/c2', 'e2', 'Bob'),
+			), 'TOKEN-NEW'),
+		));
+
+		$result = $this->engine($conns)->syncAccount($this->account($accountId), true);
+
+		$this->assertTrue($result['status']);
+		$this->assertSame(2, $result['added'], 'All contacts re-imported as new entries');
+		$this->assertSame(0, $result['updated']);
+		$this->assertSame(0, $result['skipped'], 'Identical etags must not skip after a purge');
+		$this->assertContains(201, $this->cm->deleted, 'Old imported entry must be deleted');
+		$this->assertContains(202, $this->cm->deleted, 'Old imported entry must be deleted');
+		$this->assertSame(2, $this->mappingCount($accountId), 'Mappings rebuilt for the fresh entries');
+		$this->assertSame('TOKEN-NEW', $this->account($accountId)['sync_token']);
+		// Clean import must be a full sync (no stored token sent to the API).
+		$this->assertArrayNotHasKey('syncToken', $conns->calls[0]);
+	}
 }
 
 /**

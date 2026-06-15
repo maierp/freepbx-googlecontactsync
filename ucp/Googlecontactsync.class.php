@@ -105,6 +105,7 @@ class Googlecontactsync extends Modules {
 		switch ($command) {
 			case 'savesettings':
 			case 'syncnow':
+			case 'fullsync':
 				return true;
 			default:
 				return false;
@@ -147,26 +148,45 @@ class Googlecontactsync extends Modules {
 				if (!$gcs->verifyActionToken($this->userId, 'syncnow', $token)) {
 					return array('status' => false, 'message' => _('Security token mismatch. Please reload the page and try again.'));
 				}
-				try {
-					$gcs->syncUid($this->userId);
-					$st = $gcs->getConnectionStatus($this->userId);
-					return array(
-						'status'    => true,
-						'message'   => _('Sync completed.'),
-						'lastSync'  => $this->formatLastSync($st),
-						'lastError' => $this->extractLastError($st),
-					);
-				} catch (\Exception $e) {
-					$st = $gcs->getConnectionStatus($this->userId);
-					return array(
-						'status'    => false,
-						'message'   => _('The sync did not complete. Please try again later.'),
-						'lastSync'  => $this->formatLastSync($st),
-						'lastError' => $this->extractLastError($st),
-					);
+				return $this->runSync($gcs, false);
+
+			case 'fullsync':
+				if (!$gcs->verifyActionToken($this->userId, 'fullsync', $token)) {
+					return array('status' => false, 'message' => _('Security token mismatch. Please reload the page and try again.'));
 				}
+				return $this->runSync($gcs, true);
 		}
 		return array('status' => false, 'message' => _('Unknown request.'));
+	}
+
+	/**
+	 * Run a sync for the session user and build the AJAX response (status, a
+	 * user-facing message, and the refreshed last-sync / last-error fields).
+	 *
+	 * @param object $gcs  The main Googlecontactsync BMO.
+	 * @param bool   $full When true, perform a clean full import; otherwise an
+	 *        incremental sync.
+	 * @return array<string,mixed>
+	 */
+	private function runSync($gcs, $full) {
+		try {
+			$gcs->syncUid($this->userId, $full);
+			$st = $gcs->getConnectionStatus($this->userId);
+			return array(
+				'status'    => true,
+				'message'   => $full ? _('Full sync completed.') : _('Sync completed.'),
+				'lastSync'  => $this->formatLastSync($st),
+				'lastError' => $this->extractLastError($st),
+			);
+		} catch (\Exception $e) {
+			$st = $gcs->getConnectionStatus($this->userId);
+			return array(
+				'status'    => false,
+				'message'   => _('The sync did not complete. Please try again later.'),
+				'lastSync'  => $this->formatLastSync($st),
+				'lastError' => $this->extractLastError($st),
+			);
+		}
 	}
 
 	/**
@@ -256,6 +276,7 @@ class Googlecontactsync extends Modules {
 			'disconnectToken' => $status['connected'] ? $gcs->getDisconnectToken($this->userId) : '',
 			'saveToken'       => $status['connected'] ? $gcs->getActionToken($this->userId, 'savesettings') : '',
 			'syncToken'       => $status['connected'] ? $gcs->getActionToken($this->userId, 'syncnow') : '',
+			'fullSyncToken'   => $status['connected'] ? $gcs->getActionToken($this->userId, 'fullsync') : '',
 			'groups'          => $status['connected'] ? $gcs->getAvailableGroups($this->userId) : array(),
 			'globalFrequency' => $gcs->getGlobalFrequency(),
 			'frequencies'     => \FreePBX\modules\Googlecontactsync::FREQUENCIES,

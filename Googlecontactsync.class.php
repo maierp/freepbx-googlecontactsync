@@ -955,19 +955,22 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	// ///////////////////////////////// //
 
 	/**
-	 * Run a full one-way sync (Google → Contact Manager) for a single user.
+	 * Run a one-way sync (Google → Contact Manager) for a single user.
 	 *
-	 * @param int $uid
+	 * @param int  $uid
+	 * @param bool $full When true, perform a clean full import: every previously
+	 *        imported contact is deleted and re-imported afresh. Otherwise the
+	 *        run is incremental when a sync token is available.
 	 * @return array<string,mixed> Result summary (status, counts, message).
 	 * @throws \Exception When the user has no connected Google account.
 	 */
-	public function syncUid($uid) {
+	public function syncUid($uid, $full = false) {
 		$uid     = (int) $uid;
 		$account = $this->getAccountByUid($uid);
 		if (!$account) {
 			throw new \Exception(_('No connected Google account for this user.'));
 		}
-		return $this->getPeopleSync()->syncAccount($account);
+		return $this->getPeopleSync()->syncAccount($account, (bool) $full);
 	}
 
 	/**
