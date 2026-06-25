@@ -223,14 +223,18 @@ class Googlecontactsync extends Modules {
 	 * Redirect back to a clean UCP URL (drops the OAuth query parameters so a
 	 * reload cannot replay the code/state).
 	 *
-	 * A root-relative target is used deliberately: the browser resolves it
-	 * against the current origin, so a forged `Host` header cannot turn this
-	 * into an open redirect to an attacker-controlled domain.
+	 * The target path is taken from the admin-configured OAuth redirect URI (via
+	 * {@see \FreePBX\modules\Googlecontactsync::getUcpPath()}) so it follows
+	 * wherever UCP is actually mounted — e.g. /index.php on a dedicated vhost or
+	 * /ucp/index.php on a default install. A root-relative target is used
+	 * deliberately: the browser resolves it against the current origin, so a
+	 * forged `Host` header cannot turn this into an open redirect to an
+	 * attacker-controlled domain.
 	 *
 	 * @param array<string,string> $params
 	 */
 	private function redirectClean($params) {
-		$url = '/ucp/index.php';
+		$url = $this->UCP->FreePBX->Googlecontactsync->getUcpPath();
 		if (!empty($params)) {
 			$url .= '?'.http_build_query($params);
 		}

@@ -658,6 +658,26 @@ class Googlecontactsync extends FreePBX_Helpers implements BMO {
 	}
 
 	/**
+	 * The root-relative path of the UCP entry point, derived from the configured
+	 * OAuth redirect URI (the canonical public location the admin registered with
+	 * Google). Used to send the browser back to UCP after an OAuth callback or
+	 * disconnect, regardless of where UCP is mounted (e.g. /index.php behind a
+	 * vhost, or /ucp/index.php on a default install).
+	 *
+	 * Only the path component is returned (never the host) so a forged Host
+	 * header cannot turn the post-OAuth redirect into an open redirect.
+	 *
+	 * @return string A leading-slash path, e.g. /index.php or /ucp/index.php.
+	 */
+	public function getUcpPath() {
+		$path = (string) parse_url($this->getRedirectUri(), PHP_URL_PATH);
+		if ($path === '' || $path[0] !== '/') {
+			return '/ucp/index.php';
+		}
+		return $path;
+	}
+
+	/**
 	 * Auto-detected redirect URI from the current request host (the suggested
 	 * default shown when no override is configured).
 	 *
